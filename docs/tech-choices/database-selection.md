@@ -620,7 +620,7 @@ CREATE TRIGGER update_events_updated_at
 
 ## ORM/Query Builder Options
 
-Three excellent TypeScript options for PostgreSQL:
+Two excellent TypeScript options for PostgreSQL:
 
 ### Option 1: Prisma (Recommended)
 
@@ -682,55 +682,7 @@ const events = await prisma.$queryRaw<BirthdayEvent[]>`
 - ❌ Adds query engine overhead (small performance cost)
 - ❌ Can't customize all SQL features (must use raw SQL for complex queries)
 
-### Option 2: Drizzle ORM
-
-**Best for:** Performance, SQL-like syntax, full control
-
-```typescript
-// schema.ts
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  firstName: varchar('first_name', { length: 255 }).notNull(),
-  lastName: varchar('last_name', { length: 255 }).notNull(),
-  dateOfBirth: date('date_of_birth').notNull(),
-  timezone: varchar('timezone', { length: 100 }).notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow()
-});
-
-export const birthdayEvents = pgTable('birthday_events', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  status: varchar('status', { length: 20 }).default('PENDING'),
-  targetTimestampUtc: timestamp('target_timestamp_utc').notNull(),
-  version: integer('version').default(0)
-}, (table) => ({
-  readyEventsIdx: index('idx_events_ready').on(table.targetTimestampUtc, table.status)
-}));
-
-// Usage - type-safe SQL builder
-const events = await db.select()
-  .from(birthdayEvents)
-  .where(
-    and(
-      lte(birthdayEvents.targetTimestampUtc, new Date()),
-      eq(birthdayEvents.status, 'PENDING')
-    )
-  )
-  .limit(100);
-```
-
-**Pros:**
-- ✅ Lightweight, fast
-- ✅ SQL-like syntax (easy learning curve)
-- ✅ Full TypeScript inference
-- ✅ Better performance than Prisma
-
-**Cons:**
-- ❌ Newer project (smaller community)
-- ❌ Less documentation than Prisma
-
-### Option 3: TypeORM
+### Option 2: TypeORM
 
 **Best for:** Java/Spring developers, enterprise patterns
 
@@ -787,14 +739,16 @@ const events = await manager.query(`
 ```
 
 **Pros:**
+
 - ✅ Mature, battle-tested
 - ✅ Active Record or Data Mapper patterns
 - ✅ Great for Java/C# developers
 
 **Cons:**
-- ❌ Heavier than alternatives
+
+- ❌ Heavier than Prisma
 - ❌ Decorator syntax not everyone's preference
-- ❌ TypeScript support not as good as Prisma/Drizzle
+- ❌ TypeScript support not as good as Prisma
 
 ### Recommendation: **Prisma for Phase 1**
 
@@ -805,7 +759,7 @@ const events = await manager.query(`
 - Large community and excellent docs
 - Can always add raw SQL for `FOR UPDATE SKIP LOCKED` queries
 
-**Migration path:** If performance becomes critical in Phase 2+, you can switch to Drizzle (repository pattern makes this easy).
+**Alternative:** TypeORM is also a solid choice if you prefer Active Record patterns or come from a Java/Spring background. Repository pattern makes switching between ORMs possible if needed.
 
 ---
 

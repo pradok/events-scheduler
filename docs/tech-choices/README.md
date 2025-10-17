@@ -37,6 +37,23 @@ These documents serve as:
 - What's the difference between optimistic locking in PostgreSQL vs DynamoDB?
 - Why Prisma over other ORMs?
 
+### [Event Triggering Mechanism](./event-triggering-mechanism.md)
+**Decision:** Polling/Cron (1-minute interval) over DynamoDB TTL or EventBridge
+
+**Key Topics:**
+- DynamoDB TTL limitations (48-hour imprecision, no execute-on-expiry)
+- Polling pattern with `FOR UPDATE SKIP LOCKED` for atomic event claiming
+- AWS EventBridge per-event rules scalability issues
+- Timing precision comparison (1 minute vs 48 hours)
+- Efficiency analysis (database load, cost)
+- Implementation options (long-running process vs Lambda)
+
+**Read this if you're wondering:**
+- Why not use DynamoDB TTL to auto-trigger events?
+- Isn't polling every minute wasteful?
+- How do multiple scheduler instances avoid processing duplicates?
+- What about "true" event-driven architectures?
+
 ---
 
 ## Future Documents
@@ -44,11 +61,12 @@ These documents serve as:
 As the project evolves, this folder will include:
 
 ### Phase 1 Planned Documents:
-- **runtime-selection.md** - Node.js + TypeScript rationale
+- **runtime-selection.md** - Node.js + TypeScript rationale (vs Deno, Bun)
 - **testing-framework.md** - Jest vs Vitest comparison
 - **datetime-library.md** - Luxon vs date-fns vs Day.js for timezone handling
 - **logging-strategy.md** - Winston vs Pino vs Bunyan
 - **http-framework.md** - Express vs Fastify vs Hono
+- **docker-setup.md** - Docker Compose configuration strategy
 
 ### Phase 2+ Planned Documents:
 - **message-queue.md** - SQS vs RabbitMQ vs Redis for event queue (if needed)
