@@ -7,10 +7,12 @@ This directory contains all technical documentation for the Time-Based Event Sch
 ## 📖 Documentation Map
 
 ### 🎯 Start Here
+
 - [Main README](../README.md) - Project overview and quick start
 - **You are here!** - Documentation guide
 
 ### 📚 Understanding the Problem
+
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [Brief](brief.md) | Original project requirements | Everyone |
@@ -18,18 +20,30 @@ This directory contains all technical documentation for the Time-Based Event Sch
 | [Challenges](challenges.md) | 8 major technical challenges to solve | Engineering, Architecture |
 
 ### 🏗️ Architecture & Design
+
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [Architecture Design](architecture-design.md) | System architecture, patterns, domain model, data flows | Engineering, Architecture |
 | [Phase 1 MVP Scope](phase1-mvp-scope.md) | What we're building first, in/out scope, timeline | Everyone |
 
 ### 🔧 Technology Choices
+
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [Tech Choices Overview](tech-choices/README.md) | Guide to all technology decisions | Engineering, Architecture |
 | [Database Selection](tech-choices/database-selection.md) | PostgreSQL vs DynamoDB analysis, ORM comparison | Engineering, Architecture |
+| [Event Triggering](tech-choices/event-triggering-mechanism.md) | Polling vs EventBridge analysis | Engineering, Architecture |
+| [Date/Time Library](tech-choices/datetime-library.md) | Luxon vs alternatives for timezone handling | Engineering |
+
+### 💡 Requirements & Solutions
+
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| [Requirements Solutions Map](requirements-solutions/README.md) | How each requirement is solved | Everyone |
+| [Failure Recovery Solution](requirements-solutions/failure-recovery.md) | Downtime recovery mechanism (Req #5) | Engineering, Architecture |
 
 ### 🔍 Meta Documents
+
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [Brief Coverage Mapping](brief-coverage-mapping.md) | Traceability from requirements to docs | Project Management |
