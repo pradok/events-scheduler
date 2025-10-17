@@ -23,6 +23,12 @@ This directory contains all technical documentation for the Time-Based Event Sch
 | [Architecture Design](architecture-design.md) | System architecture, patterns, domain model, data flows | Engineering, Architecture |
 | [Phase 1 MVP Scope](phase1-mvp-scope.md) | What we're building first, in/out scope, timeline | Everyone |
 
+### 🔧 Technology Choices
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| [Tech Choices Overview](tech-choices/README.md) | Guide to all technology decisions | Engineering, Architecture |
+| [Database Selection](tech-choices/database-selection.md) | PostgreSQL vs DynamoDB analysis, ORM comparison | Engineering, Architecture |
+
 ### 🔍 Meta Documents
 | Document | Purpose | Audience |
 |----------|---------|----------|
@@ -152,9 +158,10 @@ Comprehensive testing at three levels (detailed in [Architecture Design](archite
 - **Jest** for testing
 
 ### Infrastructure
-- **Database** (DynamoDB or PostgreSQL - TBD, via LocalStack for local development)
+- **Database**: PostgreSQL 16 (see [Database Selection](tech-choices/database-selection.md))
+- **ORM**: Prisma (type-safe, excellent DX)
 - **Docker Compose** for container orchestration
-- **LocalStack** for AWS service simulation
+- **LocalStack** not required for Phase 1 (direct PostgreSQL Docker container)
 
 ### Design Patterns Used
 - Strategy (event handlers)
@@ -206,11 +213,14 @@ These documents are planned but not yet created:
 
 | Document | Purpose |
 |----------|---------|
-| Infrastructure Design | LocalStack setup, deployment model, AWS service choices |
-| Database Schema | Table designs, indexes, query patterns |
+| Infrastructure Design | Docker setup, deployment model, production considerations |
 | API Specification | Request/response schemas, error codes, examples |
 | Security Design | PII handling, authentication, audit logging |
 | Operational Guide | Deployment, monitoring, troubleshooting runbooks |
+
+### ✅ Recently Completed
+- **Database Schema** - See [Database Selection](tech-choices/database-selection.md#schema-design)
+- **Database Choice** - PostgreSQL selected (see [Database Selection](tech-choices/database-selection.md))
 
 See [Documentation Roadmap](documentation-roadmap.md) for detailed gap analysis and priorities.
 
