@@ -54,6 +54,24 @@ These documents serve as:
 - How do multiple scheduler instances avoid processing duplicates?
 - What about "true" event-driven architectures?
 
+### [Date/Time Library](./datetime-library.md)
+**Decision:** Luxon over date-fns, Day.js, or Moment.js
+
+**Key Topics:**
+- IANA timezone database support and DST handling
+- Immutability vs mutable date objects
+- Luxon vs date-fns vs Day.js detailed comparison
+- TimezoneService abstraction pattern
+- Leap year birthday handling (Feb 29)
+- Testing strategy for timezone conversions
+
+**Read this if you're wondering:**
+- Why Luxon instead of date-fns (which is more popular)?
+- How do we handle DST transitions correctly?
+- What about Moment.js (it's familiar)?
+- How do we test timezone-dependent code?
+- Can we switch to Temporal in the future?
+
 ---
 
 ## Future Documents
