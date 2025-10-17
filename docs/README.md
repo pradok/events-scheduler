@@ -41,6 +41,7 @@ This directory contains all technical documentation for the Time-Based Event Sch
 |----------|---------|----------|
 | [Requirements Solutions Map](requirements-solutions/README.md) | How each requirement is solved | Everyone |
 | [Failure Recovery Solution](requirements-solutions/failure-recovery.md) | Downtime recovery mechanism (Req #5) | Engineering, Architecture |
+| [Database Mechanisms](requirements-solutions/database-mechanisms.md) | Leveraging PostgreSQL features (Req #6) | Engineering, Architecture |
 
 ### 🔍 Meta Documents
 

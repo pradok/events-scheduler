@@ -25,7 +25,7 @@ For each requirement in the original brief, we document:
 | 3 | User data model | [user-data-model.md](./user-data-model.md) | 🚧 Phase 1 |
 | 4 | Send message at 9am local time | [timezone-aware-scheduling.md](./timezone-aware-scheduling.md) | 🚧 Phase 1 |
 | 5 | **Recovery from downtime** | [failure-recovery.md](./failure-recovery.md) | ✅ Documented |
-| 6 | Database choice | [../tech-choices/database-selection.md](../tech-choices/database-selection.md) | ✅ Documented |
+| 6 | **Database choice & mechanisms** | [database-mechanisms.md](./database-mechanisms.md) + [../tech-choices/database-selection.md](../tech-choices/database-selection.md) | ✅ Documented |
 | 7 | AWS stack support | [aws-deployment.md](./aws-deployment.md) | 🚧 Phase 2 |
 | 8 | 3rd party libraries | [../tech-choices/](../tech-choices/) | ✅ Documented |
 
