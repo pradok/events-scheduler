@@ -180,6 +180,59 @@ Scheduler runs every 60 seconds. If event target is 9:00:00 AM:
 
 **For birthday messages:** User won't notice if message arrives at 9:00:37 AM vs 9:00:00 AM.
 
+#### 1a. Scheduler Region/Timezone is Irrelevant ✅
+
+**Critical insight: The scheduler can run from ANY region or timezone without affecting correctness.**
+
+This works because:
+
+1. **UTC-based storage**: All events store `targetTimestampUTC` in Universal Coordinated Time
+2. **UTC-based queries**: PostgreSQL's `NOW()` returns UTC (when database timezone is set to UTC)
+3. **Universal clock**: UTC is the same instant everywhere in the world
+
+**Example:**
+
+```
+Event: User in New York, birthday at 9 AM EST
+Stored as: targetTimestampUTC = 2025-03-15T14:00:00Z
+
+Scheduler in Virginia (us-east-1):
+  Local time: 9:00 AM EST
+  NOW() = 2025-03-15T14:00:00Z
+  Result: ✅ Event is ready
+
+Scheduler in Singapore (ap-southeast-1):
+  Local time: 10:00 PM SGT (same instant!)
+  NOW() = 2025-03-15T14:00:00Z
+  Result: ✅ Event is ready
+
+Scheduler in Ireland (eu-west-1):
+  Local time: 2:00 PM GMT
+  NOW() = 2025-03-15T14:00:00Z
+  Result: ✅ Event is ready
+
+All three schedulers see the SAME UTC time
+and make the SAME decision at the SAME instant.
+```
+
+**Deployment flexibility:**
+
+- ✅ Run scheduler in any AWS region
+- ✅ Run multiple schedulers in different regions (high availability)
+- ✅ Move scheduler between regions without code changes
+- ✅ Developer laptop can run scheduler anywhere in the world
+- ✅ No timezone configuration needed in scheduler code
+
+**What DOES matter:**
+
+| Factor | Matters? | Why |
+|--------|----------|-----|
+| Scheduler's AWS region | ❌ No | All regions use UTC |
+| Scheduler's local timezone | ❌ No | Query uses database's `NOW()` |
+| Database timezone setting | ✅ Yes | Must be set to UTC |
+| User's timezone | ✅ Yes | Used to calculate `targetTimestampUTC` |
+| Event's snapshot timezone | ✅ Yes | Immutable, used at event creation |
+
 #### 2. Controlled Execution ✅
 
 `FOR UPDATE SKIP LOCKED` (PostgreSQL) provides atomic claiming:

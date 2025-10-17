@@ -23,7 +23,11 @@ This directory contains all technical documentation for the Time-Based Event Sch
 
 | Document | Purpose | Audience |
 |----------|---------|----------|
-| [Architecture Design](architecture-design.md) | System architecture, patterns, domain model, data flows | Engineering, Architecture |
+| [Architecture Overview](architecture/README.md) ⭐ | **Start here** - Guide to all architecture documents | Everyone |
+| [Infrastructure](architecture/infrastructure.md) | Essential AWS infrastructure reference | Engineering, DevOps |
+| [Message Delivery](architecture/message-delivery-design.md) | Multi-channel delivery (Webhook/SMS/Email) | Engineering |
+| [Architecture Design](architecture/architecture-design.md) | System architecture, patterns, domain model, data flows | Engineering, Architecture |
+| [High-Level System Design](architecture/high-level-system-design.md) | Detailed AWS component architecture | Engineering, Architecture |
 | [Phase 1 MVP Scope](phase1-mvp-scope.md) | What we're building first, in/out scope, timeline | Everyone |
 
 ### 🔧 Technology Choices
@@ -54,36 +58,26 @@ This directory contains all technical documentation for the Time-Based Event Sch
 
 ## 🏗️ Architecture Overview
 
-### System Components
+### AWS Infrastructure (Latest Design)
 
+```text
+EventBridge (1 min) → Lambda Scheduler → RDS PostgreSQL + SQS → Lambda Worker → Webhook/SNS/SES
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    API Server (Express)                 │
-│         User Management + Event Generation              │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                    Database (TBD)                       │
-│            Users + Events + State Tracking              │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│            Background Scheduler (Every 1 min)           │
-│   Finds ready events → Executes → Updates state        │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│               External Webhook/API                      │
-│           (RequestBin or similar service)               │
-└─────────────────────────────────────────────────────────┘
-```
+
+**Core Services:**
+
+- **EventBridge**: Triggers scheduler every minute
+- **Lambda Scheduler**: Queries database, sends events to SQS (1 min timeout)
+- **Lambda Worker**: Processes SQS messages, delivers via Webhook/SMS/Email (30s timeout)
+- **SQS Queue**: Decouples scheduler from delivery (handles >50 events/min)
+- **RDS PostgreSQL**: Stores users and events
+- **SNS/SES**: SMS and Email delivery (alternative to webhook)
+
+See [architecture/infrastructure.md](architecture/infrastructure.md) for complete details.
 
 ### Layered Architecture
 
-The system follows a five-layer architecture (detailed in [Architecture Design](architecture-design.md)):
+The system follows a five-layer architecture (detailed in [Architecture Design](architecture/architecture-design.md)):
 
 1. **Event Registry** - Event type definitions & configuration
 2. **Event Materialization** - Generate event instances from definitions
