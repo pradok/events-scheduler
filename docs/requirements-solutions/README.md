@@ -7,6 +7,7 @@ This directory maps each requirement from [brief.md](../brief.md) to its impleme
 ## Purpose
 
 For each requirement in the original brief, we document:
+
 - **What** the requirement asks for
 - **How** we solved it (architecture, patterns, technology)
 - **Why** we chose this approach
@@ -60,6 +61,7 @@ For each requirement in the original brief, we document:
 ### For Developers
 
 When implementing a feature, read the corresponding solution document to understand:
+
 - Architecture decisions already made
 - Patterns to follow
 - Technology choices
@@ -78,6 +80,7 @@ Understand why things were built a certain way by reading the rationale in each 
 ## Cross-References
 
 These documents complement:
+
 - [Architecture Design](../architecture-design.md) - Overall system architecture
 - [Tech Choices](../tech-choices/) - Technology selection rationale
 - [Challenges](../challenges.md) - Technical problems we're solving
