@@ -71,6 +71,52 @@ Reference: [Full Architecture Document](../architecture.md#coding-standards)
 - Encapsulate validation logic in value objects
 - Type safety through domain modeling
 
+### 8. Zod Schemas as Single Source of Truth
+
+- **Schema-First Approach:** Define Zod schemas as the single source of truth for all data structures
+- **Type Derivation:** Use `z.infer<typeof schema>` to derive TypeScript interfaces from schemas
+- **Cross-Layer Type Safety:** Schema changes automatically propagate throughout the codebase
+- **DRY Principle:** Never duplicate type definitions - derive all types from schemas
+- **Runtime + Compile-Time Safety:** Get both runtime validation AND compile-time type checking
+- **Fastify Integration:** Schemas automatically provide route validation and type inference
+
+**Example Pattern:**
+
+```typescript
+// Define schema once
+const CreateUserSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timezone: z.string()
+});
+
+// Derive types from schema
+type CreateUserDTO = z.infer<typeof CreateUserSchema>;
+
+// Use in Fastify routes with automatic validation
+app.post('/user', {
+  schema: {
+    body: CreateUserSchema,
+    response: { 201: UserResponseSchema }
+  }
+}, async (request, reply) => {
+  // request.body is fully typed from CreateUserSchema!
+  const dto: CreateUserDTO = request.body;
+});
+
+// Use in use cases and domain
+export { CreateUserSchema, type CreateUserDTO };
+```
+
+**Benefits:**
+
+- Schema modifications automatically update all dependent types
+- TypeScript compiler detects breaking changes across all layers
+- Eliminates drift between validation rules and type definitions
+- Single location to update when requirements change
+- Fastify automatically validates requests and provides full type inference
+
 ---
 
 ## Test Requirements

@@ -127,7 +127,7 @@ Single repository containing all services (API, Scheduler, Worker), shared domai
 **Primary Pattern:** Hexagonal Architecture (Ports & Adapters) + Domain-Driven Design
 
 **Logical Services:**
-- API Gateway (Express REST API)
+- API Gateway (Fastify REST API)
 - Scheduler (EventBridge-triggered Lambda)
 - Worker/Executor (SQS-triggered Lambda)
 
@@ -155,12 +155,12 @@ Single repository containing all services (API, Scheduler, Worker), shared domai
 
 - **Language:** TypeScript 5.3.3 with strict mode (zero `any` types allowed)
 - **Runtime:** Node.js 20.11.0 LTS
-- **Framework:** Express.js 4.18.2 for REST API
+- **Framework:** Fastify 4.26.0 for REST API with fastify-type-provider-zod 2.0.0
 - **ORM:** Prisma 5.9.1 for type-safe database access
 - **Database:** PostgreSQL 16.1 (RDS for production, Docker for local)
 - **Date/Time:** Luxon 3.4.4 with IANA timezone database
-- **Validation:** Zod 3.22.4 for runtime schema validation
-- **Logger:** Pino 8.17.2 (structured JSON for CloudWatch)
+- **Validation:** Zod 3.25.1 for runtime schema validation and type derivation
+- **Logger:** Pino 8.17.2 (structured JSON for CloudWatch, native Fastify integration)
 
 #### AWS Services
 
@@ -195,7 +195,7 @@ Single repository containing all services (API, Scheduler, Worker), shared domai
 
 #### Deployment Portability Requirements
 
-- Domain layer must have zero dependencies on AWS, Express, Prisma, or any infrastructure
+- Domain layer must have zero dependencies on AWS, Fastify, Prisma, or any infrastructure
 - Use cases receive port implementations via dependency injection
 - Primary adapters (HTTP, Lambda, CLI) wrap the same use cases
 - Secondary adapters (Prisma, SQS, Webhooks) implement port interfaces
@@ -298,7 +298,7 @@ Comprehensive test suite (unit, integration, E2E), recovery scenario testing, pe
 5. Event entity enforces valid state transitions (PENDING → PROCESSING → COMPLETED/FAILED)
 6. Domain entities are immutable (use methods that return new instances for changes)
 7. Unit tests achieve 100% coverage for domain entities and value objects
-8. All domain code has zero imports from Express, Prisma, AWS, or infrastructure layers
+8. All domain code has zero imports from Fastify, Prisma, AWS, or infrastructure layers
 
 #### Story 1.5: Timezone Service
 
@@ -371,19 +371,20 @@ Comprehensive test suite (unit, integration, E2E), recovery scenario testing, pe
 #### Story 1.9: User CRUD Use Cases & REST API
 
 **As a** developer,
-**I want** complete user CRUD use cases with Express REST API endpoints,
+**I want** complete user CRUD use cases with Fastify REST API endpoints,
 **so that** users can be managed via HTTP requests.
 
 **Acceptance Criteria:**
 
-1. GetUserUseCase, UpdateUserUseCase, DeleteUserUseCase created
-2. UpdateUserUseCase reschedules pending events when timezone/birthday changes
-3. DeleteUserUseCase cancels all pending events for deleted user
-4. Express 4.18.2 server configured in `src/adapters/primary/http/server.ts`
-5. POST /user, GET /user/:id, PUT /user/:id, DELETE /user/:id endpoints implemented
-6. All endpoints use Zod 3.22.4 for request validation
-7. All endpoints return appropriate HTTP status codes (200, 201, 400, 404, 500)
-8. Integration tests verify all CRUD operations work end-to-end with real database
+1. Zod schemas defined for all operations with derived TypeScript types
+2. GetUserUseCase, UpdateUserUseCase, DeleteUserUseCase created using derived types
+3. UpdateUserUseCase reschedules pending events when timezone/birthday changes
+4. DeleteUserUseCase cancels all pending events for deleted user
+5. Fastify 4.26.0 server configured with fastify-type-provider-zod in `src/adapters/primary/http/server.ts`
+6. POST /user, GET /user/:id, PUT /user/:id, DELETE /user/:id endpoints implemented with schema validation
+7. All endpoints use Zod schemas for automatic validation and type inference
+8. All endpoints return appropriate HTTP status codes (200, 201, 400, 404, 500)
+9. Integration tests verify all CRUD operations work end-to-end with real database
 
 #### Story 1.10: CI/CD Pipeline Setup
 
@@ -840,7 +841,7 @@ Comprehensive test suite (unit, integration, E2E), recovery scenario testing, pe
 2. Integration tests for PrismaEventRepository (all methods, including FOR UPDATE SKIP LOCKED)
 3. Integration tests for SQSAdapter (send message, error handling)
 4. Integration tests for WebhookAdapter (success, retries, failures)
-5. Integration tests for Express API (all endpoints with real database)
+5. Integration tests for Fastify API (all endpoints with real database)
 6. All integration tests use Testcontainers for PostgreSQL
 7. Integration test coverage ≥100% for adapter code
 8. Integration tests run successfully in CI/CD pipeline

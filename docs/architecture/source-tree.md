@@ -115,7 +115,7 @@ bday/
 │   │   ├── primary/                    # Inbound adapters (entry points)
 │   │   │   ├── http/
 │   │   │   │   ├── routes/
-│   │   │   │   │   ├── user.routes.ts  # Express routes for /user
+│   │   │   │   │   ├── user.routes.ts  # Fastify routes for /user
 │   │   │   │   │   └── health.routes.ts
 │   │   │   │   ├── controllers/
 │   │   │   │   │   └── UserController.ts
@@ -123,9 +123,9 @@ bday/
 │   │   │   │   │   ├── errorHandler.ts
 │   │   │   │   │   ├── requestLogger.ts
 │   │   │   │   │   └── validation.ts
-│   │   │   │   └── server.ts           # Express app setup
+│   │   │   │   └── server.ts           # Fastify app setup
 │   │   │   └── lambda/
-│   │   │       ├── api-handler.ts      # API Gateway → Express wrapper
+│   │   │       ├── api-handler.ts      # API Gateway → Fastify wrapper (@fastify/aws-lambda)
 │   │   │       ├── scheduler-handler.ts # EventBridge → Scheduler
 │   │   │       └── worker-handler.ts   # SQS → Executor
 │   │   │
@@ -246,7 +246,7 @@ Separate `infrastructure/` directory for CDK stacks (Phase 2+). Keep infrastruct
 ### Adapter Layer (`src/adapters/`)
 
 - ✅ Can import: Application ports, domain entities, shared utilities
-- ✅ Can import: External frameworks (Express, Prisma, AWS SDK)
+- ✅ Can import: External frameworks (Fastify, Prisma, AWS SDK)
 
 ### Shared Layer (`src/shared/`)
 

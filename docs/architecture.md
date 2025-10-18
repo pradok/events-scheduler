@@ -85,7 +85,7 @@ EventBridge (1-min) → Scheduler Lambda → Query Ready Events (FOR UPDATE SKIP
 
 ```mermaid
 graph TB
-    User[User/API Client] -->|REST API| API[API Gateway - Express/Lambda]
+    User[User/API Client] -->|REST API| API[API Gateway - Fastify/Lambda]
     API -->|Create/Update User| Domain[Domain Layer - Pure Business Logic]
     Domain -->|Generate Events| DB[(PostgreSQL RDS)]
 
@@ -147,7 +147,7 @@ The system uses a modern TypeScript-based serverless stack built on AWS.
 
 - **Language:** TypeScript 5.3.3 with strict mode
 - **Runtime:** Node.js 20.11.0 LTS
-- **Framework:** Express.js 4.18.2 (REST API)
+- **Framework:** Fastify 4.26.0 (REST API with fastify-type-provider-zod 2.0.0)
 - **Database:** PostgreSQL 16.1 (RDS)
 - **ORM:** Prisma 5.9.1
 - **Testing:** Jest 29.7.0
@@ -203,9 +203,9 @@ The system is organized into **logical components** following Hexagonal Architec
 
 **Deployment Options:**
 
-- **Lambda:** Wrapped in `serverless-http` adapter for API Gateway integration
-- **Container:** Standalone Express server listening on port 3000
-- **Local Development:** Express server with hot reload (nodemon)
+- **Lambda:** Wrapped in `@fastify/aws-lambda` adapter for API Gateway integration
+- **Container:** Standalone Fastify server listening on port 3000
+- **Local Development:** Fastify server with hot reload (nodemon)
 
 ### Scheduler Component
 

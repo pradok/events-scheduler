@@ -27,14 +27,15 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 |----------|-----------|---------|---------|
 | **Language** | TypeScript | 5.3.3 | Primary development language |
 | **Runtime** | Node.js | 20.11.0 LTS | JavaScript runtime |
-| **Framework** | Express.js | 4.18.2 | REST API framework |
+| **Framework** | Fastify | 4.26.0 | REST API framework |
+| **Fastify Type Provider** | fastify-type-provider-zod | 2.0.0 | Zod integration for Fastify |
 | **ORM** | Prisma | 5.9.1 | Type-safe database client |
 | **Date/Time** | Luxon | 3.4.4 | Timezone handling |
 | **Testing Framework** | Jest | 29.7.0 | Unit/Integration/E2E tests |
 | **Database** | PostgreSQL | 16.1 | Primary data store |
 | **Message Queue** | AWS SQS | - | Event buffering |
 | **Scheduler** | AWS EventBridge | - | Periodic triggers |
-| **Validation** | Zod | 3.22.4 | Runtime schema validation |
+| **Validation** | Zod | 3.25.1 | Runtime schema validation & type derivation |
 | **Linting** | ESLint | 8.56.0 | Code quality |
 | **Formatting** | Prettier | 3.2.5 | Code formatting |
 | **Logger** | Pino | 8.17.2 | Structured logging |
@@ -51,6 +52,15 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 ---
 
 ## Key Technology Decisions
+
+### Fastify Over Express
+
+- **Native Schema Integration:** Built-in JSON Schema validation with `fastify-type-provider-zod`
+- **TypeScript-First Design:** Superior type inference for routes, better integration with `z.infer<>`
+- **Performance:** 2-3x faster than Express, lower latency for serverless/Lambda cold starts
+- **Modern Architecture:** Async/await native, plugin system aligns with hexagonal architecture
+- **Schema-Driven Development:** Auto-generate OpenAPI/Swagger from Zod schemas
+- **Meets NFR Requirements:** Performance advantage helps achieve 200ms p95 response time
 
 ### TypeScript Over JavaScript
 
@@ -76,17 +86,22 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 - `FOR UPDATE SKIP LOCKED` for atomic event claiming
 - Rich query capabilities for complex operations
 
-### Zod Over Joi
+### Zod 3.25+ Over Joi
 
-- TypeScript-first validation
-- Type inference reduces duplication
-- Modern API design
+- **TypeScript-first validation** with `z.infer<>` for type derivation
+- **Single source of truth:** Schemas define both runtime validation AND compile-time types
+- **Type inference** eliminates duplication between validation rules and type definitions
+- **Modern API design** with excellent developer experience
+- **Schema changes automatically propagate** throughout codebase via derived types
+- **Version 3.25+** required for fastify-type-provider-zod compatibility
+- **Future-proof:** Includes both Zod v3 (stable) and v4 (beta) for easy migration when v4 is production-ready
 
 ### Pino Over Winston
 
 - Superior performance in serverless
 - Structured JSON output
 - CloudWatch friendly
+- Native Fastify integration
 
 ### AWS CDK Over Terraform
 

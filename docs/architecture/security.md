@@ -9,10 +9,10 @@ Reference: [Full Architecture Document](../architecture.md)
 ## Input Validation
 
 ### Validation Library
-**Zod 3.22.4** - TypeScript-first schema validation
+**Zod 3.25.1** - TypeScript-first schema validation with type derivation
 
 ### Validation Location
-API boundary (Express middleware) before reaching use cases
+API boundary (Fastify schema validation) before reaching use cases
 
 ### Required Rules
 
