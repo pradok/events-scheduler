@@ -90,88 +90,112 @@ Modern applications serve globally distributed users who expect personalized, ti
 
 ### Core Concept and Approach
 
-The Time-Based Event Scheduling System solves timezone-aware event triggering through a **five-layer architecture** that separates concerns and enables extensibility:
+The Time-Based Event Scheduling System provides a reliable, timezone-aware event scheduling platform that handles three critical capabilities:
 
-1. **Event Registry Layer** - Define event types with their scheduling rules and handlers
-2. **Event Materialization Layer** - Generate concrete event instances from entity data (e.g., user birthdays)
-3. **Event Scheduler Layer** - Continuously evaluate "is it time?" and claim ready events atomically
-4. **Event Executor Layer** - Execute event actions with retry logic and idempotency guarantees
-5. **Recovery & Monitoring Layer** - Detect failures, catch up on missed events, provide observability
+1. **Timezone Intelligence** - Automatically converts local times to UTC, handles DST transitions, and ensures events trigger at the correct local time for users anywhere in the world
+2. **Exactly-Once Delivery** - Guarantees no duplicate messages through atomic event claiming and idempotent execution
+3. **Automatic Recovery** - Catches up on missed events after system downtime without manual intervention or sending duplicates
 
-### High-Level Architecture
+### How It Works (Simplified)
 
-```
-EventBridge (1 min trigger) → Lambda Scheduler → RDS PostgreSQL + SQS → Lambda Worker → Webhook/SNS/SES
-```
-
-**Flow:**
-1. **EventBridge** triggers scheduler Lambda every minute
-2. **Scheduler Lambda** queries PostgreSQL for events where `targetTimestampUTC <= NOW()` and `status = PENDING`
-3. Events are claimed atomically using `FOR UPDATE SKIP LOCKED` (prevents race conditions)
-4. Event details sent to **SQS queue** for asynchronous processing
-5. **Worker Lambda** consumes from SQS, executes webhook/SMS/email delivery
-6. Event status updated to `COMPLETED` or `FAILED` with retry logic
+Users register with their birthday and timezone → System creates scheduled events → Events automatically trigger at 9:00 AM local time → Birthday message delivered via webhook → System generates next year's event
 
 ### Key Differentiators
 
 **1. Timezone Intelligence Built-In**
-- Uses Luxon library with IANA timezone database for accurate conversions
-- Handles DST transitions automatically (spring forward/fall back)
-- Stores events in UTC but calculates triggers based on local time
-- Example: User in New York (9:00 AM EST = 14:00 UTC) vs Tokyo (9:00 AM JST = 00:00 UTC) both get messages at their 9 AM
+- Handles all timezone conversions automatically
+- DST transitions managed without manual intervention
+- Events trigger at correct local time regardless of user location
+- Example: User in New York and user in Tokyo both receive messages at their 9:00 AM
 
 **2. Exactly-Once Delivery Guarantee**
-- **Optimistic Locking**: Version numbers on events prevent concurrent updates
-- **State Machine**: Enforces valid transitions (PENDING → PROCESSING → COMPLETED)
-- **Atomic Claiming**: PostgreSQL `FOR UPDATE SKIP LOCKED` ensures only one scheduler claims each event
-- **Idempotency Keys**: External API calls tracked to prevent duplicate webhook/SMS/email sends
+- No duplicate messages under any failure scenario
+- Atomic event claiming prevents race conditions
+- Idempotent execution ensures retries don't cause duplicates
+- State machine enforces valid event transitions
 
 **3. Automatic Failure Recovery**
-- On system startup, query for events where `targetTimestampUTC < NOW()` and `status = PENDING`
-- Execute missed events with "late execution" flag in logs
-- Dead Letter Queue captures permanently failed events after retry exhaustion
-- No manual intervention required for common failure scenarios
+- System catches up on missed events after downtime
+- No manual intervention required
+- Failed events automatically retry with exponential backoff
+- Dead letter queue captures permanently failed events for inspection
 
 **4. Extensible Event Type System**
-- Strategy pattern for event handlers (Birthday, Anniversary, Reminder, Custom)
-- Event types defined via configuration, not hardcoded logic
-- Phase 1: Birthday handler only
-- Future phases: Plug in new handlers without modifying core scheduler
+- Birthday messaging in Phase 1
+- Architecture supports any time-based event type
+- Add new event types without modifying core scheduling logic
+- Event handlers are pluggable and configurable
 
-**5. Production-Ready Infrastructure**
-- AWS serverless architecture scales automatically
-- SQS queue buffers bursts (100+ events/minute)
-- RDS PostgreSQL provides ACID guarantees and complex queries
-- CloudWatch logs + metrics for full observability
+**5. Developer-First Experience**
+- Simple REST API for user management
+- No timezone math required in application code
+- Webhook delivery for easy integration
+- "Set it and forget it" reliability
 
 ### Why This Solution Will Succeed
 
-**Proven Patterns:**
-- Polling with optimistic locking is a battle-tested approach for distributed job scheduling
-- PostgreSQL's advanced locking features solve race conditions elegantly
-- AWS serverless architecture eliminates infrastructure management
+**Proven Approach:**
+- Built on battle-tested distributed scheduling patterns
+- Serverless architecture eliminates infrastructure management
+- Database-backed state ensures reliability and recoverability
 
-**Clear Separation of Concerns:**
-- Scheduling logic is completely independent of execution logic
-- Event handlers are pluggable and testable in isolation
-- Timezone conversion isolated in dedicated service layer
+**Clear Value Proposition:**
+- Solves complex timezone and reliability problems developers face repeatedly
+- Reduces 40+ hours of research and implementation to a simple API integration
+- Extensible architecture means future event types require minimal effort
 
-**Developer-First Experience:**
-- Simple API: Create user with birthday → system handles the rest
-- No timezone math required in application code
-- Extensibility through configuration, not code changes
+**Focused MVP:**
+- Birthday messaging is a well-understood, relatable use case
+- Proves all core capabilities (timezone handling, exactly-once delivery, recovery)
+- Establishes foundation for broader event platform vision
 
-**Comprehensive Testing Strategy:**
-- Unit tests for domain logic and timezone conversions
-- Integration tests with real PostgreSQL database
-- End-to-end tests for recovery scenarios and race conditions
-- Time-mocking utilities for deterministic time-based tests
+### Automatic Recovery: A Core Capability
 
-### High-Level Product Vision
+One of the most critical differentiators of this system is **automatic, self-healing recovery** after downtime.
 
-**Phase 1 (MVP):** Birthday messaging system with webhook delivery, proving the architecture with a concrete, well-understood use case.
+**The Challenge:**
 
-**Phase 2+:** Event platform supporting multiple event types (anniversaries, reminders, subscriptions), multiple delivery channels (SMS, Email, Push), and advanced features (custom schedules, event dependencies, user dashboards).
+When a scheduling system experiences downtime (server restart, deployment, infrastructure failure), it must catch up on all missed events without:
+
+- Sending duplicate messages
+- Missing any events
+- Requiring manual intervention
+- Losing data or state
+
+**How This System Solves It:**
+
+1. **Event State Tracking** - Every event has a status (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`) that survives system restarts
+
+2. **Automatic Detection** - On startup, the system queries: "Which events are overdue but still PENDING?"
+
+   ```sql
+   Find events where:
+   - targetTimestampUTC < NOW() (event time has passed)
+   - status = 'PENDING' (never sent successfully)
+   ```
+
+3. **Self-Healing Execution** - All missed events are automatically queued and executed without any manual trigger or intervention
+
+4. **Idempotency Protection** - Even if the system restarts multiple times during recovery, each event is delivered exactly once
+
+**Example Scenario:**
+
+- System goes down Monday at 2:00 AM
+- 50 users have birthdays during the 24-hour outage
+- System restarts Tuesday at 2:00 AM
+- Recovery service automatically finds all 50 missed events
+- All birthday messages are sent within minutes of restart
+- No duplicates, no manual work, no lost messages
+
+**Why This Matters:**
+
+Most time-based systems require manual intervention after failures (running catch-up scripts, manually triggering missed jobs, fixing database states). This system is designed to "heal itself" automatically, making it production-ready and operationally simple.
+
+### Product Vision
+
+**Phase 1 (MVP):** Birthday messaging system proving timezone-aware scheduling, exactly-once delivery, and automatic failure recovery with webhook delivery.
+
+**Phase 2+:** Multi-event platform supporting anniversaries, reminders, subscriptions with multiple delivery channels (SMS, Email, Push) and advanced features.
 
 **Long-term Vision:** The "Stripe for time-based events" - developers integrate via simple API, and all timezone complexity, reliability guarantees, and infrastructure management is handled by the platform.
 
@@ -265,11 +289,72 @@ EventBridge (1 min trigger) → Lambda Scheduler → RDS PostgreSQL + SQS → La
   - Idempotency keys for external webhook calls
   - Database transactions ensure atomic status updates
 
-- **Failure Recovery Mechanism:** Automatic catch-up after downtime
-  - On system startup, query for events where `targetTimestampUTC < NOW()` AND `status = 'PENDING'`
-  - Execute all missed events with "late execution" flag in logs
-  - Dead Letter Queue for events failing after max retries
-  - No manual intervention required for recovery
+- **Automatic Failure Recovery:** Self-healing catch-up after downtime
+  - **Automatic Detection:** On system startup, automatically query for overdue events that were never sent
+  - **Query Logic:** Find events where `targetTimestampUTC < NOW()` AND `status = 'PENDING'`
+  - **Self-Healing Execution:** All missed events automatically queued and executed without manual intervention
+  - **Observability:** Late execution flag added to logs for tracking recovery operations
+  - **Idempotency Guarantee:** Same idempotency protections prevent duplicates during recovery
+  - **Dead Letter Queue:** Events failing after max retries captured for inspection
+  - **Zero Manual Intervention:** System heals itself automatically on every restart
+
+### Recovery Requirements (Critical)
+
+Given that automatic recovery is a core differentiator and key requirement, these specific capabilities must be implemented:
+
+#### R1: State Persistence Across Restarts
+
+- Event status must be persisted in database and survive system restarts
+- Status values: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
+- Status transitions must follow valid state machine rules
+
+#### R2: Automatic Missed Event Detection
+
+- System must automatically detect missed events on startup without manual trigger
+- Detection query: Events where target time has passed but status is still `PENDING`
+- No configuration or manual intervention required to enable recovery
+
+#### R3: Duplicate Prevention During Recovery
+
+- Events must be delivered exactly once even if:
+  - System restarts multiple times during recovery period
+  - Multiple scheduler instances run concurrently during recovery
+  - Recovery is triggered multiple times
+- Same idempotency mechanisms used for normal execution apply to recovery
+
+#### R4: Recovery Performance Requirements
+
+- System must catch up on 100 missed events within 5 minutes of restart
+- Recovery must not impact normal event processing (events due "now")
+- Late events processed with same reliability guarantees as on-time events
+
+#### R5: Observability During Recovery
+
+- Late execution flag must be logged for all recovered events
+- Logs must include: how late the event is, original target time, actual execution time
+- Metrics must distinguish between on-time execution and recovery execution
+
+#### R6: Edge Case Handling
+
+The recovery mechanism must correctly handle:
+
+- **Multiple Restarts:** If system restarts 3 times in 1 hour, each restart should detect remaining missed events (not re-send already sent ones)
+- **Partial Failures:** If recovery starts sending 50 missed events but crashes after 20, the next restart should only send the remaining 30
+- **Status Update Failures:** If message is sent successfully but status update fails, recovery should not re-send (idempotency key prevents duplicate)
+- **Clock Skew:** Recovery should work correctly even if server clock is slightly off
+
+#### R7: No Manual Intervention
+
+- No admin action required to trigger recovery
+- No scripts to run after downtime
+- No database cleanup or state repair needed
+- System must be fully operational immediately after restart
+
+**Why These Requirements Matter:**
+
+Recovery is not a "nice to have" feature—it's a core requirement that distinguishes this system from fragile alternatives. The original brief explicitly states: _"The system needs to be able to recover and send all unsent messages if the service was down for a period of time (say a day)."_
+
+Without robust recovery, the system cannot be considered reliable or production-ready.
 
 ### Out of Scope for MVP
 
@@ -291,9 +376,18 @@ EventBridge (1 min trigger) → Lambda Scheduler → RDS PostgreSQL + SQS → La
 - ✅ Create, read, update, delete users via API
 - ✅ Birthday message sent at exactly 9:00 AM local time for each timezone
 - ✅ Multiple users in different timezones receive messages at their correct local times simultaneously
-- ✅ System recovers from 24-hour downtime and sends all missed messages without duplicates
-- ✅ Zero duplicate messages under any scenario (concurrent schedulers, retries, downtime recovery)
 - ✅ User can update birthday/timezone and next message sends on correct day/time
+- ✅ Zero duplicate messages under any scenario (concurrent schedulers, retries, downtime recovery)
+
+**Recovery Requirements Met (Critical):**
+
+- ✅ System automatically recovers from 24-hour simulated downtime without manual intervention
+- ✅ All missed events during downtime are detected and executed automatically
+- ✅ No duplicate messages sent during recovery (idempotency maintained)
+- ✅ Recovery completes within 5 minutes for 100 missed events
+- ✅ Late execution flag present in logs for all recovered events
+- ✅ Multiple restart scenarios tested (restart during recovery, partial failures)
+- ✅ Status update failure scenarios handled correctly (no duplicates)
 
 **Technical Requirements Met:**
 
@@ -363,162 +457,6 @@ Transform into a full-featured event scheduling platform with:
 
 ---
 
-## Technical Considerations
-
-### Platform Requirements
-
-- **Target Platforms:** Cloud-native serverless (AWS Lambda primary, architecture supports other cloud providers)
-- **Browser/OS Support:** N/A for Phase 1 (API-only, no frontend)
-- **Performance Requirements:**
-  - API latency: <200ms (95th percentile for CRUD operations)
-  - Event processing: 100+ events per minute throughput
-  - Scheduler precision: Events execute within 1 minute of target time
-  - System capacity: Tested with 1000+ users, 100+ concurrent same-day events
-
-### Technology Stack
-
-**Frontend:**
-
-- Phase 1: None (API-only)
-- Future: React/Next.js for admin dashboard and event inspection UI
-
-**Backend:**
-
-- Runtime: Node.js 18+ with TypeScript (strict mode)
-- Framework: Express.js for REST API
-- ORM: Prisma for type-safe database access
-- Date/Time: Luxon for timezone handling with IANA database
-- Testing: Jest for unit, integration, and E2E tests
-
-**Database:**
-
-- Phase 1: PostgreSQL 16 (RDS or Docker for local development)
-- Rationale: ACID transactions, `FOR UPDATE SKIP LOCKED` for atomic event claiming, rich query capabilities
-- Future consideration: Read replicas for scaling query load
-
-**Hosting/Infrastructure:**
-
-- Development: Docker Compose + LocalStack for local AWS simulation
-- Production (future): AWS serverless stack (Lambda, EventBridge, SQS, RDS, SNS, SES)
-- IaC: Terraform or AWS CDK for infrastructure management (Phase 2+)
-
-### Architecture Considerations
-
-#### Architecture Pattern: Domain-Driven Design + Hexagonal Architecture
-
-The codebase follows **Hexagonal Architecture (Ports and Adapters)** with **Domain-Driven Design** principles to ensure:
-
-- **Process Portability:** Core business logic independent of deployment model (Lambda, Container, Node process)
-- **Infrastructure Independence:** Domain layer has zero dependencies on frameworks, databases, or external services
-- **Testability:** Business logic testable without infrastructure (no database, no HTTP server required)
-- **Maintainability:** Clear boundaries between domain logic and technical concerns
-
-#### Hexagonal Architecture Layers
-
-```text
-┌─────────────────────────────────────────────────────┐
-│                   Adapters (Primary)                │
-│    HTTP API │ Lambda Handler │ CLI │ Scheduler      │ ← Entry points
-├─────────────────────────────────────────────────────┤
-│                   Application Layer                 │
-│         Use Cases │ Commands │ Queries              │ ← Orchestration
-├─────────────────────────────────────────────────────┤
-│                    Domain Layer                     │
-│   Entities │ Value Objects │ Domain Services        │ ← Business logic
-│              (PURE - No dependencies)               │
-├─────────────────────────────────────────────────────┤
-│                 Ports (Interfaces)                  │
-│  IUserRepository │ IEventRepository │ IMessageSender│ ← Contracts
-├─────────────────────────────────────────────────────┤
-│                Adapters (Secondary)                 │
-│  Prisma │ Webhook Client │ SQS │ SNS │ SES         │ ← Implementations
-└─────────────────────────────────────────────────────┘
-```
-
-#### Repository Structure (DDD + Hexagonal)
-
-```text
-bday/
-├── src/
-│   ├── adapters/              # Infrastructure adapters
-│   │   ├── primary/           # Inbound adapters (entry points)
-│   │   │   ├── http/          # Express API routes & controllers
-│   │   │   ├── lambda/        # AWS Lambda handlers
-│   │   │   └── cli/           # CLI commands (optional)
-│   │   └── secondary/         # Outbound adapters (infrastructure)
-│   │       ├── persistence/   # Database implementations (Prisma)
-│   │       ├── messaging/     # SQS, SNS, SES clients
-│   │       └── delivery/      # Webhook, SMS, Email senders
-│   │
-│   ├── application/           # Application layer (use cases)
-│   │   ├── use-cases/         # Business workflows
-│   │   │   ├── CreateUser.ts
-│   │   │   ├── ScheduleEvent.ts
-│   │   │   └── ExecuteEvent.ts
-│   │   └── ports/             # Interface definitions (contracts)
-│   │       ├── IUserRepository.ts
-│   │       ├── IEventRepository.ts
-│   │       └── IMessageSender.ts
-│   │
-│   ├── domain/                # Domain layer (PURE business logic)
-│   │   ├── entities/          # Domain entities
-│   │   │   ├── User.ts
-│   │   │   └── Event.ts
-│   │   ├── value-objects/     # Immutable value objects
-│   │   │   ├── Timezone.ts
-│   │   │   ├── EventStatus.ts
-│   │   │   └── DateOfBirth.ts
-│   │   ├── services/          # Domain services
-│   │   │   ├── TimezoneService.ts
-│   │   │   └── EventScheduler.ts
-│   │   └── events/            # Domain events (optional)
-│   │
-│   └── shared/                # Shared kernel
-│       ├── types/             # Common types
-│       ├── errors/            # Custom error classes
-│       └── utils/             # Pure utility functions
-│
-├── tests/                     # Tests mirror src/ structure
-│   ├── unit/                  # Domain & application layer tests
-│   ├── integration/           # Adapter integration tests
-│   └── e2e/                   # End-to-end scenarios
-│
-├── prisma/                    # Database schema and migrations
-├── docker/                    # Container configurations
-└── infrastructure/            # IaC (Terraform/CDK) - Phase 2+
-```
-
-#### Service Architecture
-
-- **Deployment Portability:** Same codebase runs as:
-  - **Lambda Functions:** Scheduler (EventBridge → Lambda), Worker (SQS → Lambda)
-  - **Container:** Full application with API + background scheduler
-  - **Node Process:** Local development with nodemon
-
-- **Adapter Swapping:** Change deployment model by swapping primary adapters only
-  - Lambda handler wraps use cases
-  - Express routes wrap same use cases
-  - Domain logic unchanged regardless of deployment
-
-- **Dependency Injection:** Use cases receive port implementations at runtime
-  - Production: Prisma repository, AWS SQS client
-  - Testing: In-memory repository, mock message sender
-  - Local dev: Docker PostgreSQL, RequestBin webhook
-
-#### Integration Requirements
-
-- Webhook delivery (HTTP POST to external endpoints)
-- Future: AWS SNS for SMS, AWS SES for email
-- Future: Integration with observability platforms (DataDog, New Relic)
-
-#### Security/Compliance
-
-- Phase 1: Local development only, no production security requirements
-- Phase 2+: API authentication (JWT), webhook signature verification, PII encryption at rest
-- Future: SOC 2, GDPR compliance for enterprise adoption
-
----
-
 ## Constraints & Assumptions
 
 ### Constraints
@@ -526,61 +464,52 @@ bday/
 **Budget:**
 
 - Phase 1: Learning/portfolio project with no budget constraint for development time
-- AWS costs: Target <$50/month for LocalStack development environment
-- Phase 2+: Production AWS costs to be evaluated based on usage patterns
+- Infrastructure costs: Target <$50/month for development environment
+- Phase 2+: Production costs to be evaluated based on usage patterns
 
 **Timeline:**
 
 - Phase 1 MVP: 4-week implementation plan
-  1. Foundation (setup, database, basic API)
-  2. Core scheduling (events, timezone logic, scheduler)
-  3. Reliability (exactly-once, retries, recovery)
-  4. Polish (testing, documentation, performance validation)
+  1. Foundation and basic user management
+  2. Core event scheduling and timezone logic
+  3. Reliability features (exactly-once delivery, retries, recovery)
+  4. Testing, documentation, and performance validation
 
 **Resources:**
 
 - Solo developer project for Phase 1
 - No external dependencies or third-party teams
-- Limited to personal development time (evenings/weekends or dedicated project time)
+- Limited to personal development time
 
-**Technical:**
+**Scope:**
 
-- Must run locally on Docker/LocalStack (no production AWS required for Phase 1)
-- PostgreSQL database (no NoSQL for MVP given atomic locking requirements)
-- Node.js ecosystem (leveraging existing JavaScript/TypeScript expertise)
+- Must run locally for development (no production deployment required for Phase 1)
 - English-only messages and documentation for Phase 1
+- Focus on proving core concepts, not production scalability
 
 ### Key Assumptions
 
-**Technical Assumptions:**
-
-- PostgreSQL `FOR UPDATE SKIP LOCKED` adequately prevents race conditions for MVP scale
-- 1-minute scheduler interval provides acceptable precision for birthday messaging
-- Luxon library correctly handles all timezone and DST edge cases
-- LocalStack sufficiently simulates AWS services for development/testing
-- Single scheduler instance sufficient for Phase 1 (horizontal scaling validated in architecture, not implementation)
-
 **Product Assumptions:**
 
-- Birthday messaging is compelling enough use case to validate architecture
+- Birthday messaging is a compelling enough use case to validate the platform concept
 - Hardcoded 9:00 AM trigger time is acceptable for MVP (user preferences deferred to Phase 2)
-- Webhook delivery is sufficient for Phase 1 (SMS/Email deferred)
-- Developers (target users) comfortable with REST API integration
-- Event extensibility architecture will generalize to other event types beyond birthdays
+- Webhook delivery is sufficient for Phase 1 (SMS/Email deferred to future phases)
+- Developers (target users) are comfortable with REST API integration
+- The architecture will successfully generalize to other event types beyond birthdays
 
 **Business Assumptions:**
 
 - Learning and portfolio demonstration are primary Phase 1 goals
 - No immediate revenue or customer acquisition targets
-- Open-source or internal project (licensing TBD)
-- Future phases contingent on Phase 1 success and validation
+- Project will be open-source or used internally (licensing TBD)
+- Future phases are contingent on Phase 1 success and validation
 
-**Operational Assumptions:**
+**Quality Assumptions:**
 
-- 24-hour maximum downtime acceptable for recovery testing
-- Manual database schema migrations acceptable for Phase 1
-- CloudWatch logs sufficient for observability (no APM required initially)
-- English-language error messages and logging acceptable
+- 1-minute scheduling precision is acceptable for birthday messaging (events don't need second-level precision)
+- 24-hour recovery window is acceptable for testing recovery mechanisms
+- Basic logging is sufficient for Phase 1 observability
+- Manual intervention for schema changes is acceptable during development
 
 ---
 
@@ -588,81 +517,77 @@ bday/
 
 ### Key Risks
 
-- **Timezone Library Limitations:** Luxon may have edge cases or bugs in DST handling or obscure timezones. _Impact: Incorrect message delivery times._ _Mitigation: Extensive test coverage for timezone scenarios, timezone service abstraction allows library swap if needed._
+- **Timezone Complexity Underestimated:** Timezone and DST handling may have more edge cases than anticipated. _Impact: Incorrect message delivery times._ _Mitigation: Extensive testing across multiple timezones and DST transitions, design allows library/approach changes if needed._
 
-- **LocalStack Divergence from AWS:** LocalStack behavior may differ from real AWS services, causing production issues. _Impact: Architecture validated locally but fails in production._ _Mitigation: Document LocalStack-specific quirks, plan for real AWS validation testing in Phase 2._
-
-- **Race Condition Discovery:** `FOR UPDATE SKIP LOCKED` may have unexpected behavior under high concurrency. _Impact: Duplicate message delivery._ _Mitigation: Comprehensive concurrency testing, optimistic locking as secondary safeguard._
+- **Exactly-Once Delivery Harder Than Expected:** Guaranteeing no duplicates in distributed systems is notoriously difficult. _Impact: Duplicate messages damage user trust._ _Mitigation: Multiple safeguards planned (atomic claiming, optimistic locking, idempotency), comprehensive testing of failure scenarios._
 
 - **Scope Creep:** Adding features beyond MVP scope extends timeline and delays learning. _Impact: Project never reaches "done" state._ _Mitigation: Strict adherence to MVP scope document, defer all Phase 2 features._
 
-- **Leap Year Edge Case:** Feb 29 birthdays may cause unexpected behavior in non-leap years. _Impact: User confusion or missed birthdays._ _Mitigation: Document behavior (send on Mar 1), add explicit test cases, consider making configurable in Phase 2._
+- **Limited Real-World Validation:** Development environment may not reveal production issues. _Impact: Architecture works locally but has issues at scale._ _Mitigation: Document known limitations, plan for production validation in Phase 2._
+
+- **Birthday Use Case Too Simple:** Birthday messaging may not stress the system enough to reveal architectural weaknesses. _Impact: Architecture fails when extended to more complex event types._ _Mitigation: Design with extensibility in mind, document planned event types to validate architecture decisions._
 
 ### Open Questions
 
-- **Deployment Target:** Will this ever be deployed to production AWS, or remain a local development project?
-- **Webhook Endpoint:** What webhook testing service should be recommended (RequestBin, Webhook.site, Beeceptor)?
-- **Error Notification:** How should permanently failed events be surfaced (logs only, or future admin UI)?
-- **Database Migrations:** Use Prisma Migrate for schema changes, or manual SQL migration scripts?
-- **Event History:** Should executed events be retained indefinitely, or archived/deleted after N days?
-- **Scheduler Process:** Run as separate Node process, Lambda function, or integrated with API server?
-- **CI/CD Pipeline:** GitHub Actions, GitLab CI, or local testing only for Phase 1?
+**Product & Scope:**
 
-### Areas Needing Further Research
+- **Deployment Target:** Will this ever be deployed to production, or remain a development/portfolio project?
+- **Event History:** Should executed events be retained indefinitely for audit trail, or archived/deleted after N days to reduce storage?
+- **Error Surfacing:** How should permanently failed events be surfaced to users/admins (logs only for Phase 1, or plan for admin UI in Phase 2)?
+- **Success Definition:** What specific outcomes would make Phase 1 a "success" and justify moving to Phase 2?
 
-- **Time-Mocking Strategy:** Best practices for testing time-dependent code with Jest (manual mocking vs. libraries like `timekeeper` or `MockDate`)
-- **Concurrency Testing:** Tools and techniques for simulating concurrent scheduler instances in local environment
-- **PostgreSQL Performance:** Index optimization strategies for time-based queries at scale (>10K users, >100K events)
-- **LocalStack Limitations:** Known issues with EventBridge, SQS, or Lambda in LocalStack that could affect development
-- **Production Monitoring:** What observability strategy for Phase 2+ (DataDog, New Relic, self-hosted Prometheus/Grafana)?
+**User Experience:**
+
+- **Webhook Testing:** What webhook testing service should be recommended in documentation for users to test integration?
+- **User Timezone Changes:** If a user changes timezone after event is scheduled, should we recalculate immediately or wait until next event?
+- **Leap Year Birthdays:** Should Feb 29 birthdays send on Feb 28 or Mar 1 in non-leap years? (Default behavior needs to be documented)
+
+**Future Phases:**
+
+- **Licensing:** Will this be open-source (MIT, Apache) or proprietary?
+- **Second Event Type:** Which event type should be Phase 2 priority to validate extensibility (anniversary, reminder, subscription renewal)?
+- **Multi-Tenancy:** At what phase should multi-tenant support be added (if ever)?
 
 ---
 
 ## Appendices
 
-### A. Research Summary
+### A. Related Documentation
 
-This project brief is built on comprehensive Phase 0 planning and research documented in `docs-initial/`:
+This project brief defines the **what** and **why**. For technical implementation details (**how**), see:
 
-**Problem Analysis:**
+**Architecture Documentation:**
 
-- 8 major technical challenges identified and analyzed ([challenges.md](../docs-initial/challenges.md))
-- Abstract problem statement defining this as a distributed event system ([problem-statement.md](../docs-initial/problem-statement.md))
+- [Tech Stack](architecture/tech-stack.md) - Technology choices and rationale
+- [Design Patterns](architecture/design-patterns.md) - Architectural patterns (DDD, Hexagonal Architecture)
+- [Source Tree](architecture/source-tree.md) - Repository structure and organization
+- [Data Models](architecture/data-models.md) - Domain entities and value objects
+- [Database Schema](architecture/database-schema.md) - Database design and migrations
+- [Port Interfaces](architecture/port-interfaces.md) - Interface definitions and contracts
+- [Workflows](architecture/workflows.md) - System flows and sequence diagrams
+- [Infrastructure](architecture/infrastructure.md) - Deployment and infrastructure setup
+- [Test Strategy](architecture/test-strategy.md) - Testing approach and coverage
+- [Error Handling](architecture/error-handling.md) - Error handling patterns
+- [Security](architecture/security.md) - Security considerations and best practices
+- [Coding Standards](architecture/coding-standards.md) - Code style and conventions
 
-**Architecture & Design:**
+**Historical Research:**
 
-- Five-layer architecture with AWS serverless infrastructure ([architecture/](../docs-initial/architecture/))
-- Complete system design with component architecture and data flows
-- Message delivery design for multi-channel support (Webhook/SMS/Email)
-- Local development setup guide with Docker and LocalStack
+- Previous research and planning in `docs-initial/` directory
+- Technology choice comparisons and decision rationale
+- Phase 0 problem analysis and architecture exploration
 
-**Technology Choices:**
+### B. External References
 
-- PostgreSQL vs DynamoDB analysis with ORM comparison ([database-selection.md](../docs-initial/tech-choices/database-selection.md))
-- Event triggering mechanism comparison: Polling vs EventBridge vs DynamoDB TTL ([event-triggering-mechanism.md](../docs-initial/tech-choices/event-triggering-mechanism.md))
-- Date/time library analysis: Luxon vs date-fns vs Day.js ([datetime-library.md](../docs-initial/tech-choices/datetime-library.md))
-
-**Implementation Planning:**
-
-- Detailed 4-week Phase 1 MVP scope ([phase1-mvp-scope.md](../docs-initial/phase1-mvp-scope.md))
-- Requirements-solutions mapping for all brief requirements
-- Documentation roadmap identifying gaps and priorities
-
-### B. References
-
-**Project Documentation:**
-
-- Original Brief: `docs-initial/brief.md`
-- Architecture Overview: `docs-initial/architecture/README.md`
-- Phase 1 MVP Scope: `docs-initial/phase1-mvp-scope.md`
-- Technology Choices: `docs-initial/tech-choices/README.md`
-
-**External Resources:**
+**Domain Knowledge:**
 
 - IANA Timezone Database: <https://www.iana.org/time-zones>
-- Luxon Documentation: <https://moment.github.io/luxon/>
-- PostgreSQL Locking: <https://www.postgresql.org/docs/current/explicit-locking.html>
-- AWS Serverless Best Practices: <https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html>
+- Daylight Saving Time: <https://www.timeanddate.com/time/dst/>
+
+**Industry Context:**
+
+- Distributed scheduling patterns and best practices
+- Time-based event systems in production environments
 
 ---
 
@@ -670,52 +595,42 @@ This project brief is built on comprehensive Phase 0 planning and research docum
 
 ### Immediate Actions
 
-1. **Review and finalize this Project Brief** - Validate assumptions, answer open questions, confirm scope alignment
-2. **Set up development environment** - Install Node.js, Docker, PostgreSQL, and configure LocalStack
-3. **Initialize project repository** - Create Git repo, set up Hexagonal Architecture structure, configure TypeScript and ESLint
-4. **Create database schema** - Design and implement User and Event tables using Prisma
-5. **Begin Phase 1: Foundation** - Implement domain entities, value objects, and basic use cases following DDD + Hexagonal patterns
+1. **Review and Finalize Brief** - Validate business assumptions, answer open questions, confirm scope alignment
+2. **Define Success Metrics** - Clarify what "success" means for Phase 1 (learning goals, portfolio demonstration, etc.)
+3. **Answer Open Questions** - Make decisions on unresolved product questions (leap year handling, event history retention, etc.)
+4. **Begin Implementation** - Proceed to architecture documentation and development following the 4-week implementation plan
 
-### Handoff to Development
+### Handoff to Implementation
 
-This Project Brief provides the complete context for the **Time-Based Event Scheduling System**.
+This Project Brief provides the **business context and product requirements** for the Time-Based Event Scheduling System.
 
-**For Phase 1 Implementation:**
+**What This Brief Defines:**
 
-- Follow the 4-step implementation plan outlined in Constraints section
-- Reference detailed technical specifications in `docs-initial/` folder
-- Adhere strictly to **Hexagonal Architecture + DDD** principles for code portability
-- Implement domain layer first (pure business logic with zero dependencies)
-- Build adapters (HTTP, Lambda, Prisma) that wrap use cases
-- Validate Success Criteria before marking Phase 1 complete
+- ✅ Problem statement and pain points
+- ✅ Solution concept and value proposition
+- ✅ MVP scope and feature requirements
+- ✅ Success metrics and quality criteria
+- ✅ Business constraints and assumptions
+- ✅ Risks and open questions
+- ✅ Post-MVP vision and roadmap
 
-**For Architecture Decisions:**
+**For Technical Implementation:**
 
-- Consult `docs-initial/tech-choices/` for technology selection rationale
-- Review `docs-initial/architecture/` for system design details
-- Follow five-layer architecture pattern: Registry → Materialization → Scheduler → Executor → Recovery
-- Ensure **deployment portability**: code runs identically in Lambda, Container, or Node process
+- Reference [Architecture Documentation](architecture/) for design patterns, tech stack, and implementation details
+- Follow the 4-week implementation plan outlined in the Timeline section
+- Validate all MVP Success Criteria before marking Phase 1 complete
+- Use Risks & Open Questions sections to guide decision-making during development
 
-**For Questions During Implementation:**
+**Success Criteria Reminder:**
 
-- Check Open Questions section for known decision points
-- Review Risks section for mitigation strategies
-- Consult External Resources in Appendices for technical deep-dives
-
-**Key Architectural Principles:**
-
-- **Domain layer is PURE** - No framework dependencies, fully testable without infrastructure
-- **Use cases orchestrate** - Application layer coordinates domain entities and ports
-- **Adapters are swappable** - Change deployment model or infrastructure without touching domain
-- **Ports define contracts** - Interfaces between layers enable dependency inversion
-
----
-
-**Ready to build with clean architecture!** 🚀
+Phase 1 is complete when:
+- All functional requirements are met (user CRUD, timezone-aware scheduling, exactly-once delivery, failure recovery)
+- All technical requirements are met (80%+ test coverage, zero `any` types, passes all tests)
+- Documentation is complete (API docs, architecture diagrams, setup guide)
 
 ---
 
 _Document Status: Complete_
-_Last Updated: 2025-10-18_
-_Version: 1.0_
+_Last Updated: 2025-10-19_
+_Version: 2.0 (Refactored to business-level focus)_
 
