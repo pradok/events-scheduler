@@ -75,8 +75,30 @@
 4. Test measures scheduler precision (target: events execute within 1 minute of target time)
 5. Test simulates 24-hour downtime with 100 missed events, measures recovery time (target: <5 minutes)
 6. Test reports metrics: throughput, latency percentiles, error rates
-7. All performance tests meet or exceed NFR targets
-8. Performance test results documented in README
+7. Performance test results documented in README with actual metrics vs. targets
+
+**Performance Validation & Contingency Planning:**
+
+8. If performance tests meet or exceed all NFR targets:
+   - Document actual performance metrics in README (e.g., "API p95: 145ms")
+   - Mark Story 4.4 as complete
+   - Proceed to MVP release
+
+9. If performance tests fail to meet NFR targets:
+   - Document actual vs. target metrics in performance test results
+   - Analyze bottlenecks and identify root causes (database queries, serialization, network, etc.)
+   - Create performance optimization tasks in backlog with severity labels:
+     - CRITICAL: >50% variance from target (e.g., 300ms vs. 200ms target)
+     - HIGH: 25-50% variance from target
+     - MEDIUM: 10-25% variance from target
+   - If all variances are MEDIUM or lower: Accept for MVP, defer optimization to Phase 2
+   - If any variances are HIGH or CRITICAL: Product Owner decides go/no-go for MVP release
+
+10. Performance optimization backlog items must include:
+    - Current metric vs. target metric with percentage variance
+    - Identified bottleneck (database, network, computation, serialization, etc.)
+    - Proposed optimization approach (indexing, caching, query optimization, etc.)
+    - Estimated effort (hours/days) and implementation risk level (low/medium/high)
 
 ---
 
@@ -191,3 +213,13 @@
 6. Guide includes monitoring and alerting setup recommendations
 7. Guide includes troubleshooting common deployment issues
 8. Guide notes Phase 1 constraint: local development only, production deployment is Phase 2+
+
+**Fastify Lambda Deployment Configuration:**
+
+9. Deployment guide includes Fastify AWS Lambda adapter setup:
+   - Installation instructions: `npm install @fastify/aws-lambda`
+   - Lambda handler wrapper example using `@fastify/aws-lambda`
+   - Code example showing how to wrap Fastify app for Lambda deployment
+   - Environment-specific configuration (local Fastify server vs. Lambda)
+   - Reference to AWS Lambda function handler configuration (runtime, timeout, memory)
+   - Performance considerations for Lambda cold starts with Fastify

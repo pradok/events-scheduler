@@ -200,13 +200,20 @@ Single repository containing all services (API, Scheduler, Worker), shared domai
 - Primary adapters (HTTP, Lambda, CLI) wrap the same use cases
 - Secondary adapters (Prisma, SQS, Webhooks) implement port interfaces
 
-#### Phase 1 Constraints
+#### Phase 1 Constraints & Delivery Mechanism
 
+**Message Delivery Assumption:**
+- Original brief specifies: "send message via call to request bin endpoint (or a similar service)"
+- **Interpretation:** RequestBin is a webhook testing service → MVP uses **webhook/HTTP POST delivery**
+- **Rationale:** Webhook delivery is the most flexible MVP approach, allowing integration with any external service
+- **Future Phases:** Architecture supports additional delivery channels (SMS via SNS, Email via SES, direct database write, etc.)
+
+**Phase 1 Constraints:**
 - English-only messages and logs
-- Webhook delivery only (no SMS/Email)
+- Webhook delivery only (no SMS/Email delivery in Phase 1)
 - Single-tenant (no multi-tenancy)
 - No authentication/authorization
-- No production deployment (local development only)
+- No production deployment (local development only with LocalStack)
 
 ---
 

@@ -169,16 +169,52 @@
 1. Zod schemas defined for all operations: CreateUserSchema, UpdateUserSchema, GetUserParamsSchema, UserResponseSchema
 2. TypeScript types derived from schemas using `z.infer<>` for use across all layers
 3. GetUserUseCase, UpdateUserUseCase, DeleteUserUseCase created using derived types
-4. UpdateUserUseCase reschedules pending events when timezone/birthday changes
-5. DeleteUserUseCase cancels all pending events for deleted user
-6. Fastify 4.26.0 server configured with fastify-type-provider-zod in `src/adapters/primary/http/server.ts`
-7. POST /user, GET /user/:id, PUT /user/:id, DELETE /user/:id endpoints implemented with schema validation
-8. Routes use Fastify schema property with Zod schemas for automatic validation and type inference
-9. All endpoints return appropriate HTTP status codes (200, 201, 400, 404, 500)
-10. Zod validation errors automatically mapped to HTTP 400 responses by Fastify
-11. Response schemas defined for all endpoints with automatic serialization validation
-12. Integration tests verify all CRUD operations work end-to-end with real database
-13. Tests verify type safety: schema changes cause TypeScript compilation errors in dependent code
+4. DeleteUserUseCase cancels all pending events for deleted user
+5. Fastify 4.26.0 server configured with fastify-type-provider-zod in `src/adapters/primary/http/server.ts`
+6. POST /user, GET /user/:id, PUT /user/:id, DELETE /user/:id endpoints implemented with schema validation
+7. Routes use Fastify schema property with Zod schemas for automatic validation and type inference
+8. All endpoints return appropriate HTTP status codes (200, 201, 400, 404, 500)
+9. Zod validation errors automatically mapped to HTTP 400 responses by Fastify
+10. Response schemas defined for all endpoints with automatic serialization validation
+11. Integration tests verify all CRUD operations work end-to-end with real database
+12. Tests verify type safety: schema changes cause TypeScript compilation errors in dependent code
+
+**UpdateUserUseCase Event Rescheduling Logic:**
+
+13. When user birthday is updated (dateOfBirth field):
+    - Query for PENDING events for this user with eventType='BIRTHDAY'
+    - If PENDING event exists:
+      - Update targetTimestampUTC to new birthday at 9:00 AM in user's current timezone
+      - Update targetTimestampLocal field to reflect new local time
+      - Update dateOfBirth reference in event metadata
+    - If new birthday date has already passed this year, set targetTimestamp for next year's birthday
+    - Do NOT modify events with status PROCESSING, COMPLETED, or FAILED (these are historical)
+
+14. When user timezone is updated (timezone field):
+    - Query for PENDING events for this user
+    - For each PENDING event:
+      - Recalculate targetTimestampUTC to maintain same local time (9:00 AM) in new timezone
+      - Update targetTimezone field to new timezone value
+      - Keep targetTimestampLocal unchanged (still 9:00 AM local)
+    - Do NOT modify events with status PROCESSING, COMPLETED, or FAILED
+
+15. When both birthday AND timezone updated in single request:
+    - Apply birthday update logic first (new date)
+    - Then apply timezone update logic (new timezone for new date)
+    - Ensure atomic transaction (both user update and event reschedule succeed or both fail)
+
+16. Unit tests verify rescheduling logic:
+    - Birthday changed before current year's event executes: event updated to new date
+    - Birthday changed after current year's event passed: new event created for next year
+    - Timezone changed: event time recalculated to maintain 9:00 AM local in new timezone
+    - Both birthday and timezone changed: both updates applied atomically
+    - Events in PROCESSING/COMPLETED/FAILED status are never modified
+    - Edge case: Birthday changed to Feb 29 in non-leap year handled correctly (Mar 1)
+
+17. Integration tests verify database transactions:
+    - User update and event reschedule succeed together or fail together
+    - No orphaned events after failed user update
+    - Concurrent user updates don't create duplicate events (optimistic locking tested)
 
 ---
 

@@ -77,11 +77,20 @@
 4. IWebhookClient port interface created using derived types in `src/application/ports/IWebhookClient.ts`
 5. WebhookAdapter implementation created using Axios 1.6.7 with schema validation
 6. Adapter validates outgoing payload against schema before sending
-7. Adapter includes idempotency key in request headers (X-Idempotency-Key)
-8. Adapter implements retry logic: 3 attempts with exponential backoff (1s, 2s, 4s)
-9. Adapter distinguishes between transient (5xx, timeout) and permanent (4xx) failures
-10. Adapter logs all requests and responses with correlation IDs
-11. Unit tests verify retry logic, error handling, and schema validation
+7. Test webhook endpoint configured for development and integration testing:
+   - RequestBin (https://requestbin.com) or webhook.site endpoint created
+   - Endpoint URL documented in .env.example as WEBHOOK_TEST_URL
+   - Endpoint configured to log all requests with headers and body
+   - Alternative: Local mock webhook server option documented for offline development
+8. Adapter includes idempotency key in request headers (X-Idempotency-Key)
+9. External webhook endpoint configured to respect idempotency keys:
+   - Webhook service logs show X-Idempotency-Key header in requests
+   - Duplicate requests with same idempotency key can be identified in logs
+   - Documentation explains how to verify idempotent behavior
+10. Adapter implements retry logic: 3 attempts with exponential backoff (1s, 2s, 4s)
+11. Adapter distinguishes between transient (5xx, timeout) and permanent (4xx) failures
+12. Adapter logs all requests and responses with correlation IDs
+13. Unit tests verify retry logic, error handling, and schema validation
 
 ---
 
