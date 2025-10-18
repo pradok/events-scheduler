@@ -70,7 +70,7 @@ Repository Layer (Data Access)
         ↑
 Domain Layer (Business Logic)
         ↑
-Service Layer (Orchestration)
+Use Case Layer (Application Orchestration)
         ↑
 API Layer (HTTP Interface)
 ```
@@ -161,13 +161,13 @@ The system follows **hexagonal architecture** to isolate the core domain from ex
 
 **Inbound Ports** (driving the application):
 ```typescript
-interface UserService {
+interface UserUseCase {
   createUser(userData: UserData): Promise<User>;
   updateUser(userId: UUID, updates: Partial<UserData>): Promise<User>;
   deleteUser(userId: UUID): Promise<void>;
 }
 
-interface EventScheduler {
+interface EventSchedulerUseCase {
   findReadyEvents(currentTime: Date): Promise<BirthdayEvent[]>;
   executeEvents(events: BirthdayEvent[]): Promise<void>;
 }
@@ -194,9 +194,10 @@ interface MessageSender {
 #### Adapters (implementations of ports)
 
 **Inbound Adapters** (technology-specific entry points):
-- **Express Controllers**: HTTP → Service calls
-- **CLI Commands**: Terminal → Service calls (future)
-- **Scheduler Process**: Cron → EventScheduler calls
+
+- **Express Controllers**: HTTP → Use Case calls
+- **CLI Commands**: Terminal → Use Case calls (future)
+- **Scheduler Process**: Cron → EventSchedulerUseCase calls
 
 **Outbound Adapters** (technology-specific implementations):
 - **DatabaseUserRepository**: UserRepository → Database (DynamoDB, PostgreSQL, etc.)
@@ -217,9 +218,9 @@ User Request (HTTP POST /user)
     ↓
 [Express Controller] ← Inbound Adapter
     ↓
-[UserService] ← Inbound Port
+[UserUseCase] ← Inbound Port
     ↓
-[User Entity] ← Core Domain (validates, applies business rules)
+[User Entity + Domain Services] ← Core Domain (validates, applies business rules)
     ↓
 [UserRepository] ← Outbound Port (interface)
     ↓
@@ -760,10 +761,10 @@ const eventExecutor = new EventExecutor(
              │
              ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    Service Layer                             │
+│                  Use Case Layer                              │
 │  ┌──────────────┐  ┌────────────────┐  ┌─────────────┐     │
-│  │    User      │  │     Event      │  │  Timezone   │     │
-│  │   Service    │  │ Generation Svc │  │   Service   │     │
+│  │    User      │  │  Event Sched.  │  │  Recovery   │     │
+│  │   Use Case   │  │   Use Case     │  │  Use Case   │     │
 │  └──────────────┘  └────────────────┘  └─────────────┘     │
 └────────────┬────────────────────────────────────────────────┘
              │
@@ -771,9 +772,12 @@ const eventExecutor = new EventExecutor(
 ┌─────────────────────────────────────────────────────────────┐
 │                   Domain Layer                               │
 │  ┌──────────────┐  ┌────────────────┐  ┌─────────────┐     │
-│  │     User     │  │ BirthdayEvent  │  │   Event     │     │
-│  │   (Entity)   │  │   (Entity)     │  │  Handlers   │     │
+│  │     User     │  │ BirthdayEvent  │  │   Domain    │     │
+│  │   (Entity)   │  │   (Entity)     │  │  Services   │     │
 │  └──────────────┘  └────────────────┘  └─────────────┘     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Event Handlers, Timezone Service, Event Factory    │   │
+│  └──────────────────────────────────────────────────────┘   │
 └────────────┬────────────────────────────────────────────────┘
              │
              ↓
@@ -811,13 +815,13 @@ const eventExecutor = new EventExecutor(
 ### Flow 1: Create User
 ```
 1. POST /user → UserController
-2. UserController → UserService.create(userData)
-3. UserService validates and creates User entity
-4. UserService → UserRepository.create(user)
+2. UserController → UserUseCase.createUser(userData)
+3. UserUseCase validates and creates User entity (domain)
+4. UserUseCase → UserRepository.create(user)
 5. UserRepository saves to database
-6. UserService → EventGenerationService.generateBirthdayEvent(user)
-7. EventGenerationService creates BirthdayEvent
-8. EventGenerationService → EventRepository.create(event)
+6. UserUseCase → EventGenerationService.generateBirthdayEvent(user) (domain service)
+7. EventGenerationService creates BirthdayEvent entity
+8. UserUseCase → EventRepository.create(event)
 9. Return user to controller → Return 201 Created
 ```
 
@@ -842,14 +846,14 @@ const eventExecutor = new EventExecutor(
 ### Flow 3: Update User (PUT /user/:id)
 ```
 1. PUT /user/:id → UserController
-2. UserController → UserService.update(userId, updates)
-3. UserService → UserRepository.findById(userId)
-4. UserService updates User entity
+2. UserController → UserUseCase.updateUser(userId, updates)
+3. UserUseCase → UserRepository.findById(userId)
+4. UserUseCase updates User entity (domain)
 5. If dateOfBirth or timezone changed:
-   a. UserService → EventRepository.findByUserId(userId)
-   b. UserService → EventRepository.delete(pending events)
-   c. UserService → EventGenerationService.regenerateEvents(user)
-6. UserService → UserRepository.update(user)
+   a. UserUseCase → EventRepository.findByUserId(userId)
+   b. UserUseCase → EventRepository.delete(pending events)
+   c. UserUseCase → EventGenerationService.regenerateEvents(user) (domain service)
+6. UserUseCase → UserRepository.update(user)
 7. Return updated user → Return 200 OK
 ```
 
@@ -869,22 +873,27 @@ const eventExecutor = new EventExecutor(
 ## Separation of Concerns
 
 ### API Layer
+
 - HTTP request/response handling
 - Request validation (schema, types)
 - Error response formatting
 - Authentication (future)
 
-### Service Layer
-- Business logic orchestration
+### Use Case Layer (Application Layer)
+
+- Application logic orchestration
 - Transaction boundaries
-- Cross-entity operations
-- Validation of business rules
+- Coordination between domain objects
+- Cross-entity workflows
+- **Note**: This layer contains NO business logic—it delegates to domain entities and services
 
 ### Domain Layer
-- Entity behavior
+
+- Entity behavior and business rules
 - Domain invariants
 - State transitions
 - Value objects
+- Domain services (stateless business logic)
 
 ### Repository Layer
 - Data persistence

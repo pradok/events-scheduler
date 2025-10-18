@@ -79,31 +79,31 @@ A timezone-aware event scheduling system that sends birthday messages to users a
              │                     │                      │
              ▼                     ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    SERVICE LAYER (Business Logic)                       │
+│                 USE CASE LAYER (Application Orchestration)              │
 │                                                                          │
 │  ┌──────────────────┐  ┌──────────────────────┐  ┌─────────────────┐  │
-│  │   UserService    │  │ EventGenerationSvc   │  │ TimezoneService │  │
-│  │                  │  │                      │  │                 │  │
-│  │ - createUser()   │  │ - generateEvent()    │  │ - convertToUTC()│  │
-│  │ - updateUser()   │  │ - calculateNext()    │  │ - isValidTZ()   │  │
-│  │ - deleteUser()   │  │ - regenerateEvents() │  │                 │  │
+│  │   UserUseCase    │  │  EventScheduler      │  │  RecoveryMgr    │  │
+│  │                  │  │    UseCase           │  │   UseCase       │  │
+│  │ - createUser()   │  │ - findReady()        │  │ - recoverMissed │  │
+│  │ - updateUser()   │  │ - executeEvents()    │  │   Events()      │  │
+│  │ - deleteUser()   │  │                      │  │                 │  │
 │  └─────────┬────────┘  └──────────┬───────────┘  └────────┬────────┘  │
 │            │                      │                       │            │
 └────────────┼──────────────────────┼───────────────────────┼────────────┘
              │                      │                       │
              ▼                      ▼                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      DOMAIN LAYER (Core Entities)                       │
+│               DOMAIN LAYER (Business Logic & Entities)                  │
 │                                                                          │
 │  ┌──────────────────┐  ┌──────────────────────┐  ┌─────────────────┐  │
-│  │   User Entity    │  │  BirthdayEvent       │  │  Event Handler  │  │
-│  │                  │  │     Entity           │  │   (Strategy)    │  │
-│  │ - id             │  │                      │  │                 │  │
-│  │ - firstName      │  │ - id                 │  │ handle(event)   │  │
-│  │ - lastName       │  │ - userId             │  │                 │  │
-│  │ - dateOfBirth    │  │ - targetTimestampUTC │  │ BirthdayHandler │  │
-│  │ - timezone       │  │ - status (enum)      │  │ AnniversaryHdlr │  │
-│  │                  │  │ - version            │  │   (future)      │  │
+│  │   User Entity    │  │  BirthdayEvent       │  │ Domain Services │  │
+│  │                  │  │     Entity           │  │                 │  │
+│  │ - id             │  │                      │  │ TimezoneService │  │
+│  │ - firstName      │  │ - id                 │  │ - convertToUTC()│  │
+│  │ - lastName       │  │ - userId             │  │ - isValidTZ()   │  │
+│  │ - dateOfBirth    │  │ - targetTimestampUTC │  │                 │  │
+│  │ - timezone       │  │ - status (enum)      │  │ EventGenSvc     │  │
+│  │                  │  │ - version            │  │ EventHandlers   │  │
 │  └─────────┬────────┘  └──────────┬───────────┘  └────────┬────────┘  │
 │            │                      │                       │            │
 └────────────┼──────────────────────┼───────────────────────┼────────────┘
@@ -261,31 +261,34 @@ class HealthController {
 
 ---
 
-### 2. Service Layer (Business Logic Orchestration)
+### 2. Use Case Layer (Application Orchestration)
 
-**Purpose**: Coordinate operations across multiple entities and repositories
+**Purpose**: Coordinate application workflows and orchestrate domain objects
 
 **Components**:
 
 ```typescript
-// src/services/user.service.ts
-class UserService {
+// src/use-cases/user.use-case.ts
+class UserUseCase {
   constructor(
     private userRepo: UserRepository,
-    private eventGenerationSvc: EventGenerationService,
-    private timezoneService: TimezoneService
+    private eventGenerationSvc: EventGenerationService,  // Domain service
+    private timezoneService: TimezoneService              // Domain service
   ) {}
 
   async createUser(userData: CreateUserDto): Promise<User> {
-    // 1. Validate timezone
+    // 1. Validate timezone (delegates to domain service)
     if (!this.timezoneService.isValidTimezone(userData.timezone)) {
       throw new InvalidTimezoneError();
     }
 
-    // 2. Create user in database
-    const user = await this.userRepo.create(userData);
+    // 2. Create user entity (domain object)
+    const user = User.create(userData);
 
-    // 3. Generate birthday event for current year
+    // 3. Persist user
+    await this.userRepo.create(user);
+
+    // 4. Generate birthday event (domain service)
     await this.eventGenerationSvc.generateBirthdayEvent(user);
 
     return user;
@@ -295,20 +298,18 @@ class UserService {
     // 1. Fetch existing user
     const user = await this.userRepo.findById(userId);
 
-    // 2. Check if dateOfBirth or timezone changed
-    const needsEventRegeneration =
-      updates.dateOfBirth !== user.dateOfBirth ||
-      updates.timezone !== user.timezone;
+    // 2. Update user entity (domain logic)
+    const needsEventRegeneration = user.update(updates);
 
-    // 3. Update user
-    const updatedUser = await this.userRepo.update(userId, updates);
+    // 3. Persist updated user
+    await this.userRepo.update(user);
 
-    // 4. Regenerate events if needed
+    // 4. Regenerate events if needed (domain service)
     if (needsEventRegeneration) {
       await this.eventGenerationSvc.regenerateEvents(userId);
     }
 
-    return updatedUser;
+    return user;
   }
 
   async deleteUser(userId: string): Promise<void> {
@@ -316,8 +317,12 @@ class UserService {
     await this.userRepo.delete(userId);
   }
 }
+```
 
-// src/services/event-generation.service.ts
+**Domain Services** (separate from use cases):
+
+```typescript
+// src/domain/services/event-generation.service.ts
 class EventGenerationService {
   constructor(
     private eventRepo: EventRepository,
@@ -334,33 +339,29 @@ class EventGenerationService {
       user.timezone
     );
 
-    // Create event
-    return this.eventRepo.create({
+    // Create event entity (domain logic)
+    const event = BirthdayEvent.create({
       userId: user.id,
-      eventType: 'BIRTHDAY',
       targetYear: currentYear,
       targetDate: user.dateOfBirth,
       targetTime: '09:00:00',
-      timezone: user.timezone, // Snapshot
-      targetTimestampUTC: targetUTC,
-      status: 'PENDING'
+      timezone: user.timezone,
+      targetTimestampUTC: targetUTC
     });
+
+    return this.eventRepo.create(event);
   }
 
   async regenerateEvents(userId: string): Promise<void> {
-    // 1. Delete all PENDING events for user
     await this.eventRepo.deletePendingByUserId(userId);
-
-    // 2. Generate new event for current year
     const user = await this.userRepo.findById(userId);
     await this.generateBirthdayEvent(user);
   }
 }
 
-// src/services/timezone.service.ts
+// src/domain/services/timezone.service.ts
 class TimezoneService {
   convertToUTC(date: string, time: string, timezone: string): Date {
-    // Uses Luxon to convert local time to UTC
     const dt = DateTime.fromObject(
       { /* parse date/time */ },
       { zone: timezone }
@@ -375,12 +376,14 @@ class TimezoneService {
 ```
 
 **Responsibilities**:
-- ✅ Business logic orchestration
+
+- ✅ Application workflow orchestration
 - ✅ Transaction boundaries
-- ✅ Cross-entity operations
-- ✅ Validation of business rules
+- ✅ Coordination between domain objects (entities and domain services)
+- ✅ Calling domain services and repositories
+- ❌ NO business logic (delegates to domain layer)
 - ❌ NO HTTP concerns
-- ❌ NO database queries directly
+- ❌ NO database queries directly (uses repositories)
 
 ---
 
@@ -401,7 +404,24 @@ class User {
   createdAt: Date;
   updatedAt: Date;
 
-  // Domain methods
+  // Domain methods (business logic)
+  static create(data: CreateUserDto): User {
+    // Validation and creation logic
+    if (!data.firstName || !data.lastName) {
+      throw new ValidationError('Name is required');
+    }
+    return new User(data);
+  }
+
+  update(updates: UpdateUserDto): boolean {
+    const needsEventRegeneration =
+      updates.dateOfBirth !== this.dateOfBirth ||
+      updates.timezone !== this.timezone;
+
+    Object.assign(this, updates);
+    return needsEventRegeneration;
+  }
+
   getFullName(): string {
     return `${this.firstName} ${this.lastName}`;
   }
@@ -471,12 +491,15 @@ enum EventStatus {
 ```
 
 **Responsibilities**:
-- ✅ Entity behavior
-- ✅ Domain invariants
-- ✅ State transitions
+
+- ✅ Business rules and logic
+- ✅ Entity behavior and invariants
+- ✅ State transitions and validation
 - ✅ Value objects
-- ❌ NO persistence logic
-- ❌ NO external API calls
+- ✅ Domain services (stateless business logic)
+- ❌ NO persistence logic (uses repositories via use cases)
+- ❌ NO external API calls (infrastructure concern)
+- ❌ NO HTTP/framework concerns
 
 ---
 
@@ -760,7 +783,7 @@ class Logger {
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 3. UserService.createUser()                                         │
+│ 3. UserUseCase.createUser()                                         │
 │    - Validate timezone (TimezoneService.isValidTimezone())          │
 │    - If invalid → throw InvalidTimezoneError                        │
 └─────────────────────────┬───────────────────────────────────────────┘
@@ -949,7 +972,7 @@ Current time: 2025-03-15T14:00:30Z (9:00:30 AM EST)
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 3. UserService.updateUser()                                         │
+│ 3. UserUseCase.updateUser()                                         │
 │    - Fetch existing user                                            │
 │    - Detect timezone changed: "America/New_York" → "Asia/Tokyo"    │
 │    - Set needsEventRegeneration = true                              │
@@ -1473,7 +1496,7 @@ No coordination needed between schedulers ✅
 
 ### Core Design Principles
 
-1. **Layered Architecture**: Clear separation between API, Service, Domain, Repository, and Infrastructure
+1. **Layered Architecture**: Clear separation between API, Use Case, Domain, Repository, and Infrastructure
 2. **UTC-Based Storage**: All times stored in UTC, query based on UTC
 3. **Atomic Locking**: `FOR UPDATE SKIP LOCKED` prevents race conditions
 4. **Timezone Snapshots**: Events are immutable once created
