@@ -1,18 +1,16 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-# Check for Claude Code references in staged files (excluding hook files)
-STAGED_FILES=$(git diff --cached --name-only | grep -v "^.husky/")
+# Check for AI tool references in staged files (excluding hook files and docs/qa)
+STAGED_FILES=$(git diff --cached --name-only | grep -v -E "^\.husky/|^docs/qa/")
 if [ -n "$STAGED_FILES" ]; then
-  if echo "$STAGED_FILES" | xargs grep -l "Claude Code\|claude.com/claude-code" 2>/dev/null; then
+  FORBIDDEN_REFS=$(echo "$STAGED_FILES" | xargs grep -l "Claude Code\|claude\.com/claude-code" 2>/dev/null)
+  if [ -n "$FORBIDDEN_REFS" ]; then
     echo ""
-    echo "❌ ERROR: Found reference to 'Claude Code' in staged files"
+    echo "❌ ERROR: Found AI tool reference in staged files:"
+    echo "$FORBIDDEN_REFS"
     echo ""
-    echo "Please remove any mentions of:"
-    echo "  - 'Claude Code'"
-    echo "  - 'claude.com/claude-code'"
-    echo ""
-    echo "These references should not be included in commits."
+    echo "Please remove any mentions of 'Claude Code' or 'claude.com/claude-code'"
     echo ""
     exit 1
   fi
