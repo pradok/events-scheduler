@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Check for AI tool references in commit message
+if grep -i "Claude Code\|claude\.com/claude-code" "$1" >/dev/null 2>&1; then
+  echo ""
+  echo "❌ ERROR: Commit message contains AI tool references"
+  echo ""
+  echo "Please remove mentions of 'Claude Code' or 'claude.com/claude-code'"
+  echo ""
+  exit 1
+fi
