@@ -1,55 +1,53 @@
 # Time-Based Event Scheduling System
 
-A distributed, timezone-aware event scheduling system that triggers events at specific local times. Built with extensibility in mind, starting with birthday messaging as the Phase 1 MVP.
+A distributed, timezone-aware event scheduling system that triggers events at specific local times. Built with hexagonal architecture and domain-driven design, starting with birthday messaging as the Phase 1 MVP.
 
 ---
 
-## What This Project Is About
+## Overview
 
-This is **not just a birthday messaging app** - it's a general-purpose **event scheduling platform** that can trigger any action at specific local times across multiple timezones.
+This project is a **general-purpose event scheduling platform** that can trigger any action at specific local times across multiple timezones. The system handles temporal criteria, timezone context, recurrence patterns, and pluggable delivery mechanisms.
 
-### The Core Problem
+### Architecture
 
-Schedule and execute events based on:
-- ⏰ **Temporal criteria** (specific dates/times, recurrence patterns)
-- 🌍 **Timezone context** (local time, not just UTC)
-- 🔄 **Recurrence patterns** (annual, monthly, one-time, custom)
-- 🔌 **Pluggable actions** (webhooks, emails, SMS, API calls, etc.)
-
-### Use Cases
-
-While Phase 1 focuses on birthday messages, the architecture supports:
-- 🎂 Birthday greetings at 9am local time
-- 💑 Anniversary reminders
-- 📅 Subscription renewal notifications
-- 📊 Scheduled report generation per office timezone
-- 🔔 Appointment reminders
-- 🏢 Contract expiry notifications
-- ...and any time-based event you can imagine
+- **Hexagonal Architecture**: Clear separation between domain, application, and infrastructure layers
+- **Domain-Driven Design**: Rich domain models with business logic encapsulated in entities
+- **Design Patterns**: Strategy, Repository, State Machine, Observer, Specification
+- **TypeScript Strict Mode**: Zero `any` types, comprehensive type safety
+- **Test-Driven**: AAA pattern, 80%+ coverage target for domain and application layers
 
 ---
 
-## Key Features (Phase 1 MVP)
+## Technology Stack
 
-- ✅ **Multi-timezone Support**: Send messages at exactly 9am local time across all timezones
-- ✅ **Exactly-Once Delivery**: No duplicate messages, guaranteed
-- ✅ **Failure Recovery**: System recovers from downtime and catches up on missed events
-- ✅ **RESTful API**: Create, read, update, delete users
-- ✅ **Automatic Scheduling**: Events generated and scheduled automatically
-- ✅ **Extensible Architecture**: Built to support future event types without core changes
-
-**Technical Highlights**: Layered architecture, design patterns (Strategy, Repository, State Machine), highly testable, LocalStack ready, TypeScript strict mode, race condition safe.
+| Category | Technology | Version | Purpose |
+|----------|-----------|---------|---------|
+| **Language** | TypeScript | 5.3.3 | Primary development language with strict mode |
+| **Runtime** | Node.js | 20.11.0 LTS | JavaScript runtime |
+| **Framework** | Fastify | 4.26.0 | REST API framework (future story) |
+| **Database** | PostgreSQL | 16.1 | Primary data store (future story) |
+| **ORM** | Prisma | 5.9.1 | Type-safe database client (future story) |
+| **Date/Time** | Luxon | 3.4.4 | Timezone handling (future story) |
+| **Build Tool** | esbuild | 0.20.0 | Fast TypeScript compilation |
+| **Linting** | ESLint | 8.56.0 | Code quality enforcement |
+| **Formatting** | Prettier | 3.2.5 | Code formatting |
+| **Testing** | Jest | 29.7.0 | Unit/Integration/E2E tests (future story) |
+| **Validation** | Zod | 3.25.1 | Runtime schema validation (future story) |
+| **Message Queue** | AWS SQS | - | Event buffering (future story) |
+| **Scheduler** | AWS EventBridge | - | Periodic triggers (future story) |
+| **Deployment** | AWS Lambda | - | Serverless compute (future story) |
 
 ---
 
-## Quick Start
+## Getting Started
 
 ### Prerequisites
-- Node.js >= 18
-- Docker & Docker Compose
-- Git
 
-### Installation & Running
+- **Node.js**: 20.11.0 LTS
+- **npm**: 10.x (comes with Node.js)
+- **Git**: Latest version
+
+### Installation
 
 ```bash
 # Clone the repository
@@ -59,68 +57,22 @@ cd bday
 # Install dependencies
 npm install
 
-# Start LocalStack (Database, etc.)
-docker-compose up -d
-
-# Setup database schema
-npm run db:setup
-
-# Run the application
-npm run dev
-
-# In another terminal, start the scheduler
-npm run scheduler
-
-# Run tests
-npm test
+# Build the project
+npm run build
 ```
 
-### Create Your First User
+### Available Scripts
 
-```bash
-curl -X POST http://localhost:3000/user \
-  -H "Content-Type: application/json" \
-  -d '{
-    "firstName": "John",
-    "lastName": "Doe",
-    "dateOfBirth": "1990-03-15",
-    "timezone": "America/New_York"
-  }'
-```
+| Script | Command | Description |
+|--------|---------|-------------|
+| **Build** | `npm run build` | Compile TypeScript to JavaScript using esbuild |
+| **Build Watch** | `npm run build:watch` | Compile with watch mode for development |
+| **Lint** | `npm run lint` | Run ESLint on source files |
+| **Format** | `npm run format` | Format code with Prettier |
 
-The system will automatically schedule a birthday message for 9:00 AM on March 15th in the New York timezone.
+### Code Quality
 
----
-
-## Documentation
-
-### 📖 Documentation Hub
-👉 **[See docs/README.md](docs/README.md)** for complete documentation guide with architecture diagrams, design principles, and how the system works.
-
-### 📋 Core Documents
-
-| Document | Description |
-|----------|-------------|
-| [Problem Statement](docs/problem-statement.md) | Why this exists, abstract problem definition |
-| [Technical Challenges](docs/challenges.md) | 8 major technical challenges we solve |
-| [Architecture Design](docs/architecture-design.md) | System architecture, patterns, domain model |
-| [Phase 1 MVP Scope](docs/phase1-mvp-scope.md) | What we're building, timeline, success criteria |
-
-### 🔗 Reference Documents
-
-| Document | Description |
-|----------|-------------|
-| [Original Brief](docs/brief.md) | Project requirements |
-| [Coverage Mapping](docs/brief-coverage-mapping.md) | Requirements traceability |
-| [Documentation Roadmap](docs/documentation-roadmap.md) | What's covered and what's still needed |
-
----
-
-## Technology Stack
-
-**Runtime**: Node.js + TypeScript | **Framework**: Express.js | **Database**: TBD (LocalStack) | **Testing**: Jest | **Date/Time**: Luxon
-
-See [docs/README.md](docs/README.md#-technology-stack) for complete tech stack details.
+Pre-commit hooks are configured to automatically run linting and formatting on all staged TypeScript files. This ensures code quality is maintained throughout development.
 
 ---
 
@@ -128,75 +80,161 @@ See [docs/README.md](docs/README.md#-technology-stack) for complete tech stack d
 
 ```
 bday/
-├── docs/                    # 📚 All documentation (see docs/README.md)
-├── src/                     # Source code (Phase 1)
-│   ├── api/                 # API controllers
-│   ├── domain/              # Domain entities & services
-│   ├── repository/          # Data access layer
-│   ├── scheduler/           # Background scheduler
-│   └── infrastructure/      # External clients, logging
-├── tests/                   # Test suites (unit, integration, e2e)
-├── docker-compose.yml       # LocalStack + services
+├── .github/
+│   └── workflows/           # CI/CD pipelines (future story)
+│
+├── src/
+│   ├── domain/              # Pure business logic (no dependencies)
+│   │   ├── entities/        # Domain entities (User, Event)
+│   │   ├── value-objects/   # Value objects (Timezone, DateOfBirth)
+│   │   ├── services/        # Domain services
+│   │   └── errors/          # Domain-specific errors
+│   │
+│   ├── application/         # Use cases and orchestration
+│   │   ├── ports/           # Interface definitions
+│   │   └── use-cases/       # Application use cases
+│   │
+│   ├── adapters/            # Infrastructure implementations
+│   │   ├── primary/         # Inbound adapters (HTTP, Lambda)
+│   │   └── secondary/       # Outbound adapters (Database, Queue)
+│   │
+│   ├── shared/              # Shared utilities
+│   │   ├── types/           # Common types
+│   │   ├── errors/          # Application errors
+│   │   └── utils/           # Helper functions
+│   │
+│   └── index.ts             # Main entry point
+│
+├── tests/                   # E2E tests (future story)
+├── docs/                    # Documentation
+├── .gitignore               # Git ignore patterns
+├── package.json             # Project metadata and dependencies
+├── tsconfig.json            # TypeScript configuration
+├── .eslintrc.js             # ESLint configuration
+├── .prettierrc              # Prettier configuration
 └── README.md                # This file
 ```
 
 ---
 
-## Development Status
+## Development Workflow
 
-### Current Phase: Phase 0 - Planning & Design ✅ Complete
-- ✅ Problem definition and technical challenges documented
-- ✅ Architecture designed with extensibility in mind
-- ✅ Domain model and design patterns established
-- ✅ Phase 1 MVP scope defined
+### Making Changes
 
-### Next Phase: Phase 1 - Birthday Messaging MVP 🚧 Starting Soon
-4-week implementation plan:
-- **Week 1**: Foundation (setup, LocalStack, database, basic API)
-- **Week 2**: Core Scheduling (events, timezone logic, scheduler, executor)
-- **Week 3**: Reliability (exactly-once delivery, retries, recovery)
-- **Week 4**: Polish (user updates, testing, documentation, performance)
+1. Create/modify TypeScript files in `src/`
+2. Run `npm run lint` to check for errors
+3. Run `npm run format` to format code
+4. Run `npm run build` to compile
+5. Commit changes (pre-commit hooks will run automatically)
 
-See [Phase 1 MVP Scope](docs/phase1-mvp-scope.md) for detailed breakdown.
+### Code Standards
+
+#### Critical Rules
+
+- **No console.log in production**: Use logger (Pino) - enforced by ESLint
+- **No `any` types**: Use explicit types or `unknown` - enforced by TypeScript strict mode
+- **Repository pattern required**: All database access through interfaces
+- **Domain layer purity**: Zero imports from adapters or infrastructure
+
+#### Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Classes | PascalCase | `User`, `CreateUserUseCase` |
+| Interfaces (Ports) | PascalCase with `I` prefix | `IUserRepository` |
+| Files | kebab-case (infra), PascalCase (domain) | `user.routes.ts`, `User.ts` |
+| Variables/Functions | camelCase | `calculateNextBirthday` |
+| Constants | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT` |
+| Test Files | `*.test.ts` | `User.test.ts` |
+
+---
+
+## Key Features (Planned)
+
+### Phase 1 MVP
+
+- ✅ **Multi-timezone Support**: Send messages at exactly 9am local time across all timezones
+- ✅ **Exactly-Once Delivery**: No duplicate messages, guaranteed
+- ✅ **Failure Recovery**: System recovers from downtime and catches up on missed events
+- ✅ **RESTful API**: Create, read, update, delete users
+- ✅ **Automatic Scheduling**: Events generated and scheduled automatically
+- ✅ **Extensible Architecture**: Built to support future event types without core changes
 
 ### Future Phases
-- **Phase 2**: Event extensibility (anniversary, custom events)
-- **Phase 3**: Advanced features (auth, dashboard, audit trail)
-- **Phase 4**: Production readiness (multi-tenancy, monitoring, performance)
+
+- **Phase 2**: Additional event types (anniversary, custom events)
+- **Phase 3**: Advanced features (authentication, dashboard, audit trail)
+- **Phase 4**: Production readiness (multi-tenancy, monitoring, scaling)
+
+---
+
+## Testing Strategy (Future)
+
+- **Unit Tests**: Domain entities, value objects, services (100% coverage target)
+- **Integration Tests**: Repository implementations, use cases (80% coverage target)
+- **E2E Tests**: Full user workflows with real database
+- **Test Organization**: Colocated `*.test.ts` files or parallel `tests/` directory
+
+---
+
+## Documentation
+
+### Core Documents
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System architecture and design patterns |
+| [PRD](docs/prd.md) | Product requirements and user stories |
+| [Tech Stack](docs/architecture/tech-stack.md) | Technology choices and rationale |
+| [Coding Standards](docs/architecture/coding-standards.md) | Development guidelines |
+| [Source Tree](docs/architecture/source-tree.md) | Project structure details |
+
+---
+
+## Development Status
+
+### Current Phase: Phase 1 - Foundation & User Management 🚧
+
+**Story 1.1: Project Setup & Monorepo Foundation** ✅ Complete
+- ✅ Git repository configured
+- ✅ TypeScript 5.3.3 with strict mode
+- ✅ ESLint 8.56.0 and Prettier 3.2.5
+- ✅ esbuild 0.20.0 for compilation
+- ✅ Pre-commit hooks configured
+- ✅ README.md complete
+
+**Next Stories**:
+- Story 1.2: Docker Development Environment
+- Story 1.3: Database Schema & Prisma Setup
+- Story 1.4: Domain Layer - User & Event Entities
 
 ---
 
 ## Contributing
 
-This is currently a personal project for learning and demonstration. Contributions welcome after Phase 1 MVP is complete.
+This is currently a learning and demonstration project. Code standards are strictly enforced:
 
-**Code Standards**: TypeScript strict mode, ESLint + Prettier enforced, 80%+ test coverage, conventional commits, all tests must pass.
+- TypeScript strict mode (zero `any` types)
+- ESLint + Prettier enforced via pre-commit hooks
+- All tests must pass (future)
+- 80%+ test coverage for domain/application layers (future)
 
 ---
 
 ## License
 
-[To be determined]
+ISC
 
 ---
 
-## Contact & Links
+## Contact
 
 - **Documentation**: [docs/](docs/)
-- **Project Repository**: [GitHub URL]
-- **Issues**: [GitHub Issues]
-- **Author**: [Your Name]
+- **Issues**: GitHub Issues
+- **Repository**: [GitHub URL]
 
 ---
 
-## Acknowledgments
+**Status**: 🚧 Phase 1 In Progress | Story 1.1 Complete
 
-This project architecture was inspired by Domain-Driven Design principles, Event-Driven Architecture patterns, AWS serverless best practices, and the challenge of building timezone-aware distributed systems.
-
-Special thanks to the open-source community for LocalStack, Luxon, and Jest.
-
----
-
-**Status**: 📋 Phase 0 Complete | 🚧 Phase 1 Starting Soon
-
-**Last Updated**: 2025-10-17
+**Last Updated**: 2025-10-20

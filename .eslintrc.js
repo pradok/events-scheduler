@@ -1,0 +1,96 @@
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+    project: './tsconfig.json',
+  },
+  plugins: ['@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:@typescript-eslint/recommended-requiring-type-checking',
+    'prettier',
+  ],
+  root: true,
+  env: {
+    node: true,
+    es2022: true,
+  },
+  rules: {
+    // Forbid console.log in src/ directory (except test files)
+    'no-console': ['error', { allow: ['warn', 'error'] }],
+
+    // Forbid any type
+    '@typescript-eslint/no-explicit-any': 'error',
+
+    // Enforce explicit function return types
+    '@typescript-eslint/explicit-function-return-type': [
+      'warn',
+      {
+        allowExpressions: true,
+        allowTypedFunctionExpressions: true,
+      },
+    ],
+
+    // Enforce explicit member accessibility
+    '@typescript-eslint/explicit-member-accessibility': [
+      'warn',
+      {
+        accessibility: 'explicit',
+      },
+    ],
+
+    // Prefer interfaces over type aliases for object types
+    '@typescript-eslint/consistent-type-definitions': ['warn', 'interface'],
+
+    // Disallow unused variables
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      },
+    ],
+
+    // Require await in async functions
+    '@typescript-eslint/require-await': 'error',
+
+    // Disallow floating promises
+    '@typescript-eslint/no-floating-promises': 'error',
+
+    // Enforce consistent naming conventions
+    '@typescript-eslint/naming-convention': [
+      'warn',
+      {
+        selector: 'interface',
+        format: ['PascalCase'],
+        custom: {
+          regex: '^I[A-Z]',
+          match: false,
+        },
+      },
+      {
+        selector: 'class',
+        format: ['PascalCase'],
+      },
+      {
+        selector: 'variable',
+        format: ['camelCase', 'UPPER_CASE'],
+      },
+      {
+        selector: 'function',
+        format: ['camelCase'],
+      },
+    ],
+  },
+  overrides: [
+    {
+      // Allow console in test files
+      files: ['**/*.test.ts', '**/*.spec.ts'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
+  ],
+};
