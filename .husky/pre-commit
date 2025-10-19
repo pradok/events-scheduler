@@ -1,4 +1,21 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# Check for Claude Code references in staged files (excluding hook files)
+STAGED_FILES=$(git diff --cached --name-only | grep -v "^.husky/")
+if [ -n "$STAGED_FILES" ]; then
+  if echo "$STAGED_FILES" | xargs grep -l "Claude Code\|claude.com/claude-code" 2>/dev/null; then
+    echo ""
+    echo "❌ ERROR: Found reference to 'Claude Code' in staged files"
+    echo ""
+    echo "Please remove any mentions of:"
+    echo "  - 'Claude Code'"
+    echo "  - 'claude.com/claude-code'"
+    echo ""
+    echo "These references should not be included in commits."
+    echo ""
+    exit 1
+  fi
+fi
+
 npx lint-staged
