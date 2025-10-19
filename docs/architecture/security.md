@@ -72,7 +72,15 @@ function validateCreateUser(req: Request, res: Response, next: NextFunction) {
 ## Authentication & Authorization
 
 ### Phase 1 (Current)
-**No authentication** - Local development only, not exposed to public internet
+
+**Documented but not fully implemented** - Local development focuses on Fastify REST API setup
+
+- **API Gateway**: Architecture documented in [infrastructure.md](infrastructure.md#api-gateway-architecture)
+- **Lambda Authorizer**: JWT validation pattern defined, implementation deferred
+- **Bypass Option**: Environment flag allows bypassing authorization for local testing
+- **Focus**: Establish Fastify endpoints first, add authorization in later stories
+
+**Rationale:** Phase 1 prioritizes core domain logic and API structure. Authorization infrastructure is documented for future implementation but not required for initial local development and testing.
 
 ### Phase 2+ Requirements
 
@@ -196,9 +204,15 @@ WEBHOOK_SECRET=<secret-key>
 ### Rate Limiting
 
 #### Phase 1
-Not implemented - local development only
+
+Documented but not enforced - local development
+
+- **API Gateway throttling**: Architecture documented in [infrastructure.md](infrastructure.md#throttling-phase-2)
+- **LocalStack**: Can simulate throttling for testing if needed
+- **Recommendation**: Focus on functional API implementation first
 
 #### Phase 2+
+
 AWS API Gateway throttling:
 - **Burst**: 1000 requests/second
 - **Rate**: 500 requests/second sustained
@@ -207,12 +221,17 @@ AWS API Gateway throttling:
 ### CORS Policy
 
 #### Phase 1
+
 Allow all origins for local development:
+
 ```typescript
-app.use(cors({
+// Fastify CORS configuration
+import cors from '@fastify/cors';
+
+app.register(cors, {
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE']
-}));
+});
 ```
 
 #### Phase 2+
@@ -254,9 +273,15 @@ app.use(helmet({
 ### HTTPS Enforcement
 
 #### Phase 1
-Not applicable - local development (HTTP)
+
+Not enforced - local development (HTTP acceptable)
+
+- **Local Development**: HTTP via Docker/LocalStack
+- **API Gateway**: HTTPS enforcement documented in [infrastructure.md](infrastructure.md#https-only-phase-2) for Phase 2+
+- **LocalStack**: Simulates HTTPS if needed for testing
 
 #### Phase 2+
+
 - API Gateway enforces HTTPS
 - No HTTP endpoints exposed
 - TLS 1.2+ only

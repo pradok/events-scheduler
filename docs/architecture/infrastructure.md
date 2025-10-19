@@ -82,6 +82,337 @@ GitHub Actions
 
 ---
 
+## API Gateway Architecture
+
+### Overview
+
+AWS API Gateway serves as the HTTP entry point for all REST API endpoints, providing:
+- Request routing to Lambda functions
+- Request/response validation
+- Authorization and authentication
+- Rate limiting and throttling
+- CORS handling
+- Request/response transformation
+
+### Gateway Type
+
+**REST API (v1)** - Chosen over HTTP API (v2) for:
+- Lambda Authorizer support (custom JWT validation)
+- More granular authorization controls
+- Request/response transformation capabilities
+- Better CloudWatch integration
+- Full compatibility with LocalStack
+
+### Architecture Pattern
+
+```text
+Client Request
+    ↓
+API Gateway (REST API)
+    ↓
+Lambda Authorizer (validates JWT token)
+    ↓ (authorized)
+API Gateway (routes to endpoint)
+    ↓
+Lambda Function (api-handler.ts)
+    ↓
+@fastify/aws-lambda adapter
+    ↓
+Fastify Application
+    ↓
+Use Cases → Domain Logic
+```
+
+### Authorization Strategy
+
+#### Phase 1 (Local Development)
+
+- **Method**: JWT-based authorization via Lambda Authorizer
+- **Implementation**: Custom Lambda function validates JWT tokens
+- **Token Source**: `Authorization: Bearer <token>` header
+- **Validation**: JWT signature verification + expiration check
+- **Caching**: Authorizer results cached for 5 minutes (configurable)
+- **Fallback**: For local testing, can bypass authorizer with environment flag
+
+#### Phase 2+ (Production)
+
+- **Method**: AWS Cognito User Pools or Auth0 integration
+- **Token Type**: JWT tokens issued by identity provider
+- **Scopes**: Role-based access control (admin, user, service)
+- **MFA**: Optional multi-factor authentication
+- **Token Rotation**: Automatic refresh token handling
+
+### Lambda Authorizer
+
+#### Purpose
+
+Validates JWT tokens before requests reach the API Lambda function.
+
+#### Behavior
+
+```typescript
+// Pseudo-code for Lambda Authorizer logic
+async function authorize(event: APIGatewayTokenAuthorizerEvent) {
+  const token = event.authorizationToken.replace('Bearer ', '');
+
+  try {
+    // Validate JWT signature and expiration
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Generate IAM policy allowing/denying access
+    return generatePolicy(decoded.sub, 'Allow', event.methodArn, {
+      userId: decoded.sub,
+      email: decoded.email,
+      roles: decoded.roles
+    });
+  } catch (error) {
+    return generatePolicy('user', 'Deny', event.methodArn);
+  }
+}
+```
+
+#### Response Caching
+
+- **Cache Key**: Authorization token
+- **TTL**: 300 seconds (5 minutes)
+- **Benefits**: Reduces authorizer invocations, improves latency
+
+#### Context Propagation
+
+Authorizer passes user context to Lambda function:
+
+```json
+{
+  "userId": "uuid-1234",
+  "email": "user@example.com",
+  "roles": ["user"]
+}
+```
+
+### API Gateway Configuration
+
+#### Endpoint Configuration
+
+```typescript
+// CDK Example (Phase 2+)
+const api = new apigateway.RestApi(this, 'BdayAPI', {
+  restApiName: 'Time-Based Event API',
+  description: 'REST API for event scheduling system',
+  deployOptions: {
+    stageName: 'v1',
+    loggingLevel: apigateway.MethodLoggingLevel.INFO,
+    dataTraceEnabled: true,
+    tracingEnabled: true
+  },
+  defaultCorsPreflightOptions: {
+    allowOrigins: apigateway.Cors.ALL_ORIGINS, // Restrict in production
+    allowMethods: apigateway.Cors.ALL_METHODS,
+    allowHeaders: ['Content-Type', 'Authorization']
+  }
+});
+```
+
+#### Request Validation
+
+```typescript
+// Request validator for all endpoints
+const requestValidator = api.addRequestValidator('RequestValidator', {
+  validateRequestBody: true,
+  validateRequestParameters: true
+});
+```
+
+#### Throttling (Phase 2+)
+
+```typescript
+// Rate limiting configuration
+{
+  burstLimit: 1000,    // Max concurrent requests
+  rateLimit: 500       // Sustained requests/second
+}
+```
+
+### Local Development with LocalStack
+
+#### LocalStack Configuration
+
+```yaml
+# docker-compose.yml
+services:
+  localstack:
+    image: localstack/localstack:3.1.0
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=apigateway,lambda,sqs,eventbridge
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./localstack-init:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+```
+
+#### API Gateway Setup Script
+
+```bash
+# localstack-init/api-gateway.sh
+#!/bin/bash
+
+# Create REST API
+API_ID=$(awslocal apigateway create-rest-api \
+  --name "bday-api" \
+  --endpoint-configuration types=REGIONAL \
+  --query 'id' --output text)
+
+# Get root resource ID
+ROOT_ID=$(awslocal apigateway get-resources \
+  --rest-api-id $API_ID \
+  --query 'items[0].id' --output text)
+
+# Create /user resource
+USER_RESOURCE_ID=$(awslocal apigateway create-resource \
+  --rest-api-id $API_ID \
+  --parent-id $ROOT_ID \
+  --path-part "user" \
+  --query 'id' --output text)
+
+# Create POST method
+awslocal apigateway put-method \
+  --rest-api-id $API_ID \
+  --resource-id $USER_RESOURCE_ID \
+  --http-method POST \
+  --authorization-type CUSTOM \
+  --authorizer-id $AUTHORIZER_ID
+
+# Deploy to 'local' stage
+awslocal apigateway create-deployment \
+  --rest-api-id $API_ID \
+  --stage-name local
+```
+
+#### Access Pattern
+
+```bash
+# Local API endpoint
+http://localhost:4566/restapis/$API_ID/local/_user_request_/user
+
+# Or with custom domain (LocalStack Pro)
+http://api.bday.localhost.localstack.cloud:4566/user
+```
+
+### Integration with Fastify
+
+#### Lambda Handler
+
+```typescript
+// src/adapters/primary/lambda/api-handler.ts
+import awsLambdaFastify from '@fastify/aws-lambda';
+import { app } from '../http/server'; // Fastify app
+
+export const handler = awsLambdaFastify(app);
+```
+
+#### Request Context Access
+
+```typescript
+// Access API Gateway request context in Fastify routes
+app.get('/user/:id', async (request, reply) => {
+  // API Gateway context available via @fastify/aws-lambda
+  const userId = request.requestContext.authorizer.userId;
+
+  // Validate user can only access their own data
+  if (request.params.id !== userId) {
+    return reply.code(403).send({ error: 'Forbidden' });
+  }
+
+  // ... rest of handler
+});
+```
+
+### Monitoring and Logging
+
+#### CloudWatch Integration (Phase 2+)
+
+- **Access Logs**: All API requests logged to CloudWatch
+- **Execution Logs**: Detailed request/response traces
+- **Metrics**: Request count, latency, 4xx/5xx errors
+- **Alarms**: High error rate, high latency
+
+#### Log Format
+
+```json
+{
+  "requestId": "abc-123",
+  "ip": "203.0.113.1",
+  "requestTime": "2025-10-19T10:30:00Z",
+  "httpMethod": "POST",
+  "resourcePath": "/user",
+  "status": 201,
+  "protocol": "HTTP/1.1",
+  "responseLength": 245,
+  "latency": 150
+}
+```
+
+### Security Considerations
+
+#### HTTPS Only (Phase 2+)
+
+- All API Gateway endpoints enforce HTTPS
+- TLS 1.2+ required
+- No HTTP traffic allowed
+
+#### CORS Configuration
+
+- Restrict `allowOrigins` to known domains in production
+- Whitelist only required headers
+- Limit allowed methods to required ones (GET, POST, PUT, DELETE)
+
+#### API Keys (Future)
+
+- Optional API key requirement for external integrations
+- Usage plans for rate limiting per client
+- Quota management
+
+### Cost Considerations
+
+#### Pricing Model (Phase 2+)
+
+- **API Gateway**: $3.50 per million requests
+- **Data Transfer**: $0.09 per GB
+- **Caching**: Optional ($0.020/hour for 0.5GB cache)
+
+#### Cost Optimization
+
+- Use authorizer caching (reduce Lambda invocations)
+- Enable compression for responses
+- Monitor and optimize payload sizes
+- Consider HTTP API (v2) if authorizer complexity allows
+
+### Testing Strategy
+
+#### Local Testing
+
+- Use LocalStack for API Gateway simulation
+- Test authorization flow with mock JWT tokens
+- Validate request/response transformations
+
+#### Integration Testing
+
+- Test API Gateway → Lambda integration
+- Verify authorizer behavior (allow/deny)
+- Test CORS preflight requests
+- Validate error handling and status codes
+
+#### Load Testing (Phase 2+)
+
+- Test throttling limits
+- Validate authorizer cache behavior
+- Measure latency under load
+
+---
+
 ## Environments
 
 ### local

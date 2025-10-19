@@ -10,7 +10,8 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 
 - **Provider:** AWS (Amazon Web Services)
 - **Key Services:**
-  - Lambda (compute for scheduler and workers)
+  - **API Gateway** (REST API endpoint with authorization)
+  - Lambda (compute for API, scheduler, and workers)
   - EventBridge (scheduled triggers every 1 minute)
   - SQS (message queue for event buffering)
   - RDS PostgreSQL (primary database)
@@ -33,9 +34,11 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 | **Date/Time** | Luxon | 3.4.4 | Timezone handling |
 | **Testing Framework** | Jest | 29.7.0 | Unit/Integration/E2E tests |
 | **Database** | PostgreSQL | 16.1 | Primary data store |
+| **API Gateway** | AWS API Gateway | REST API v1 | HTTP endpoint with authorization |
 | **Message Queue** | AWS SQS | - | Event buffering |
 | **Scheduler** | AWS EventBridge | - | Periodic triggers |
 | **Validation** | Zod | 3.25.1 | Runtime schema validation & type derivation |
+| **Lambda Adapter** | @fastify/aws-lambda | 4.1.0 | Fastify → API Gateway integration |
 | **Linting** | ESLint | 8.56.0 | Code quality |
 | **Formatting** | Prettier | 3.2.5 | Code formatting |
 | **Logger** | Pino | 8.17.2 | Structured logging |
