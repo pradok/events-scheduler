@@ -13,6 +13,10 @@
     "build:watch": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --sourcemap --watch",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
+    "docker:start": "./scripts/docker-start.sh",
+    "docker:stop": "./scripts/docker-stop.sh",
+    "docker:reset": "./scripts/docker-reset.sh",
+    "docker:logs": "./scripts/docker-logs.sh",
     "prepare": "husky install"
   },
   "keywords": [

@@ -25,9 +25,10 @@ This project is a **general-purpose event scheduling platform** that can trigger
 | **Language** | TypeScript | 5.3.3 | Primary development language with strict mode |
 | **Runtime** | Node.js | 20.11.0 LTS | JavaScript runtime |
 | **Framework** | Fastify | 4.26.0 | REST API framework (future story) |
-| **Database** | PostgreSQL | 16.1 | Primary data store (future story) |
-| **ORM** | Prisma | 5.9.1 | Type-safe database client (future story) |
-| **Date/Time** | Luxon | 3.4.4 | Timezone handling (future story) |
+| **Database** | PostgreSQL | 16.1 | Primary data store (Docker) |
+| **ORM** | Prisma | 5.9.1 | Type-safe database client (Story 1.3) |
+| **Date/Time** | Luxon | 3.4.4 | Timezone handling (Story 1.5) |
+| **Local AWS** | LocalStack | 3.1.0 | AWS service emulation (Docker) |
 | **Build Tool** | esbuild | 0.20.0 | Fast TypeScript compilation |
 | **Linting** | ESLint | 8.56.0 | Code quality enforcement |
 | **Formatting** | Prettier | 3.2.5 | Code formatting |
@@ -46,6 +47,8 @@ This project is a **general-purpose event scheduling platform** that can trigger
 - **Node.js**: 20.11.0 LTS
 - **npm**: 10.x (comes with Node.js)
 - **Git**: Latest version
+- **Docker**: 24.0.7+ with Docker Compose
+- **PostgreSQL Client** (optional): For manual database access
 
 ### Installation
 
@@ -57,8 +60,118 @@ cd bday
 # Install dependencies
 npm install
 
+# Copy environment variables template
+cp .env.example .env
+
+# Start Docker development environment
+npm run docker:start
+
 # Build the project
 npm run build
+```
+
+### Local Development with Docker
+
+The project uses Docker Compose to run PostgreSQL and LocalStack (AWS service emulation) locally.
+
+#### Starting the Environment
+
+```bash
+# Start all services (PostgreSQL + LocalStack)
+npm run docker:start
+
+# Or use the helper script directly
+./scripts/docker-start.sh
+```
+
+This will start:
+
+- **PostgreSQL 16.1** on `localhost:5432`
+- **LocalStack 3.1.0** on `http://localhost:4566` (API Gateway, Lambda, SQS, EventBridge, SNS)
+
+#### Stopping the Environment
+
+```bash
+# Stop all services
+npm run docker:stop
+
+# Or use the helper script
+./scripts/docker-stop.sh
+```
+
+#### Viewing Logs
+
+```bash
+# View all service logs
+npm run docker:logs
+
+# View specific service logs
+./scripts/docker-logs.sh postgres
+./scripts/docker-logs.sh localstack
+```
+
+#### Resetting the Database
+
+```bash
+# WARNING: This deletes all data!
+npm run docker:reset
+
+# Or use the helper script
+./scripts/docker-reset.sh
+```
+
+#### Accessing PostgreSQL
+
+```bash
+# Using psql (if installed)
+psql -h localhost -p 5432 -U bday_user -d bday_db
+# Password: local_dev_password (from .env)
+
+# Or using Docker exec
+docker exec -it bday-postgres psql -U bday_user -d bday_db
+```
+
+#### Testing LocalStack
+
+```bash
+# Check LocalStack health
+curl http://localhost:4566/_localstack/health
+
+# List SQS queues (requires awslocal CLI)
+awslocal sqs list-queues
+
+# List EventBridge rules
+awslocal events list-rules
+```
+
+#### Troubleshooting Docker
+
+**Services won't start:**
+
+```bash
+# Check if ports are already in use
+lsof -i :5432   # PostgreSQL
+lsof -i :4566   # LocalStack
+
+# View detailed logs
+docker-compose -f docker/docker-compose.yml logs
+```
+
+**Database connection errors:**
+
+```bash
+# Verify PostgreSQL is healthy
+docker-compose -f docker/docker-compose.yml ps
+
+# Check PostgreSQL logs
+docker logs bday-postgres
+```
+
+**Reset everything:**
+
+```bash
+# Stop services, remove volumes, and restart
+npm run docker:reset
 ```
 
 ### Available Scripts
@@ -69,6 +182,10 @@ npm run build
 | **Build Watch** | `npm run build:watch` | Compile with watch mode for development |
 | **Lint** | `npm run lint` | Run ESLint on source files |
 | **Format** | `npm run format` | Format code with Prettier |
+| **Docker Start** | `npm run docker:start` | Start PostgreSQL and LocalStack |
+| **Docker Stop** | `npm run docker:stop` | Stop all Docker services |
+| **Docker Reset** | `npm run docker:reset` | Reset database (deletes all data) |
+| **Docker Logs** | `npm run docker:logs` | View logs for all services |
 
 ### Code Quality
 
@@ -80,39 +197,38 @@ Pre-commit hooks are configured to automatically run linting and formatting on a
 
 ```
 bday/
-├── .github/
-│   └── workflows/           # CI/CD pipelines (future story)
+├── docker/                  # Docker Compose configuration (Story 1.2) ✅
+│   ├── docker-compose.yml   # PostgreSQL + LocalStack
+│   ├── postgres/            # PostgreSQL initialization
+│   └── localstack/          # AWS service initialization
 │
-├── src/
-│   ├── domain/              # Pure business logic (no dependencies)
-│   │   ├── entities/        # Domain entities (User, Event)
-│   │   ├── value-objects/   # Value objects (Timezone, DateOfBirth)
-│   │   ├── services/        # Domain services
-│   │   └── errors/          # Domain-specific errors
-│   │
-│   ├── application/         # Use cases and orchestration
-│   │   ├── ports/           # Interface definitions
-│   │   └── use-cases/       # Application use cases
-│   │
-│   ├── adapters/            # Infrastructure implementations
-│   │   ├── primary/         # Inbound adapters (HTTP, Lambda)
-│   │   └── secondary/       # Outbound adapters (Database, Queue)
-│   │
+├── scripts/                 # Helper scripts (Story 1.2) ✅
+│   ├── docker-start.sh      # Start Docker environment
+│   ├── docker-stop.sh       # Stop Docker services
+│   ├── docker-reset.sh      # Reset database
+│   └── docker-logs.sh       # View service logs
+│
+├── src/                     # Source code (Stories 1.4+)
+│   ├── domain/              # Pure business logic (Story 1.4, 1.5)
+│   ├── application/         # Use cases (Story 1.6+)
+│   ├── adapters/            # Infrastructure (Story 1.7+)
 │   ├── shared/              # Shared utilities
-│   │   ├── types/           # Common types
-│   │   ├── errors/          # Application errors
-│   │   └── utils/           # Helper functions
-│   │
-│   └── index.ts             # Main entry point
+│   └── index.ts             # Placeholder entry point
 │
-├── tests/                   # E2E tests (future story)
-├── docs/                    # Documentation
-├── .gitignore               # Git ignore patterns
-├── package.json             # Project metadata and dependencies
-├── tsconfig.json            # TypeScript configuration
-├── .eslintrc.js             # ESLint configuration
-├── .prettierrc              # Prettier configuration
-└── README.md                # This file
+├── docs/                    # Architecture documentation ✅
+│   ├── architecture.md      # Main architecture document
+│   ├── architecture/        # Sharded architecture docs
+│   ├── prd.md               # Product requirements
+│   ├── prd/                 # Sharded PRD (epics)
+│   └── stories/             # Story files (BMAD workflow)
+│
+├── .env                     # Local environment config (gitignored) ✅
+├── .env.example             # Environment template ✅
+├── package.json             # Dependencies and scripts ✅
+├── tsconfig.json            # TypeScript strict mode config ✅
+├── .eslintrc.js             # ESLint rules ✅
+├── .prettierrc              # Code formatting ✅
+└── README.md                # This file ✅
 ```
 
 ---
@@ -151,14 +267,21 @@ bday/
 
 ## Key Features (Planned)
 
-### Phase 1 MVP
+### Phase 1 MVP - In Progress
 
-- ✅ **Multi-timezone Support**: Send messages at exactly 9am local time across all timezones
-- ✅ **Exactly-Once Delivery**: No duplicate messages, guaranteed
-- ✅ **Failure Recovery**: System recovers from downtime and catches up on missed events
-- ✅ **RESTful API**: Create, read, update, delete users
-- ✅ **Automatic Scheduling**: Events generated and scheduled automatically
-- ✅ **Extensible Architecture**: Built to support future event types without core changes
+- ⏳ **Multi-timezone Support**: Send messages at exactly 9am local time across all timezones
+- ⏳ **Exactly-Once Delivery**: No duplicate messages, guaranteed
+- ⏳ **Failure Recovery**: System recovers from downtime and catches up on missed events
+- ⏳ **RESTful API**: Create, read, update, delete users
+- ⏳ **Automatic Scheduling**: Events generated and scheduled automatically
+- ✅ **Extensible Architecture**: Hexagonal + DDD patterns established
+
+### Completed Infrastructure
+
+- ✅ **Development Environment**: Docker Compose with PostgreSQL and LocalStack
+- ✅ **Build Tooling**: TypeScript strict mode, ESLint, Prettier, esbuild
+- ✅ **Code Quality**: Pre-commit hooks, linting, formatting enforcement
+- ✅ **Architecture Documentation**: Comprehensive design docs with BMAD workflow
 
 ### Future Phases
 
@@ -193,31 +316,75 @@ bday/
 
 ## Development Status
 
-### Current Phase: Phase 1 - Foundation & User Management 🚧
+### Current Phase: Epic 1 - Foundation & User Management 🚧
 
-**Story 1.1: Project Setup & Monorepo Foundation** ✅ Complete
-- ✅ Git repository configured
-- ✅ TypeScript 5.3.3 with strict mode
-- ✅ ESLint 8.56.0 and Prettier 3.2.5
-- ✅ esbuild 0.20.0 for compilation
-- ✅ Pre-commit hooks configured
-- ✅ README.md complete
+**Progress**: 2/10 stories complete (20%)
 
-**Next Stories**:
-- Story 1.2: Docker Development Environment
-- Story 1.3: Database Schema & Prisma Setup
+#### Completed Stories ✅
+
+**Story 1.1: Project Setup & Monorepo Foundation** ✅
+
+- Git repository, TypeScript 5.3.3 strict mode
+- ESLint 8.56.0, Prettier 3.2.5, esbuild 0.20.0
+- Pre-commit hooks with husky + lint-staged
+- Comprehensive architecture documentation
+
+**Story 1.2: Docker Development Environment** ✅
+
+- Docker Compose with PostgreSQL 16.1
+- LocalStack 3.1.0 (API Gateway, Lambda, SQS, EventBridge, SNS)
+- Database initialization scripts (uuid-ossp extension)
+- Helper scripts for Docker operations
+
+#### Next Up 📋
+
+**Story 1.3: Database Schema & Prisma Setup** ⏳ Next
+
+- Prisma ORM configuration
+- Database schema for users and events tables
+- Migrations and seeding
+
+**Upcoming in Epic 1:**
+
 - Story 1.4: Domain Layer - User & Event Entities
+- Story 1.5: Timezone Service
+- Story 1.6: Repository Port Interfaces
+- Story 1.7: Prisma Repository Implementations
+- Story 1.8: Create User Use Case
+- Story 1.9: User CRUD Use Cases & REST API
+- Story 1.10: CI/CD Pipeline Setup
+
+See [docs/prd/epic-1-foundation-user-management.md](docs/prd/epic-1-foundation-user-management.md) for full epic details.
+
+---
+
+## Development Methodology
+
+This project follows the **BMAD (Business-to-Market Accelerated Delivery)** methodology:
+
+- **Story-Driven Development**: Each feature is a well-defined story with acceptance criteria
+- **Comprehensive Planning**: Architecture-first approach with detailed technical documentation
+- **AI-Assisted Development**: Stories created by SM agent, implemented by Dev agent, reviewed by QA agent
+- **Quality Gates**: Each story includes mandatory QA review before marking as "Done"
+
+See [.bmad-core/](. bmad-core/) for workflow configuration and agent definitions.
 
 ---
 
 ## Contributing
 
-This is currently a learning and demonstration project. Code standards are strictly enforced:
+This is a demonstration project showcasing:
+
+- Hexagonal Architecture + Domain-Driven Design
+- BMAD methodology for AI-assisted development
+- TypeScript strict mode best practices
+- Comprehensive testing strategies
+
+Code standards are strictly enforced:
 
 - TypeScript strict mode (zero `any` types)
-- ESLint + Prettier enforced via pre-commit hooks
-- All tests must pass (future)
-- 80%+ test coverage for domain/application layers (future)
+- ESLint + Prettier via pre-commit hooks
+- Test coverage targets (when testing infrastructure is added)
 
 ---
 
@@ -227,14 +394,6 @@ ISC
 
 ---
 
-## Contact
-
-- **Documentation**: [docs/](docs/)
-- **Issues**: GitHub Issues
-- **Repository**: [GitHub URL]
-
----
-
-**Status**: 🚧 Phase 1 In Progress | Story 1.1 Complete
+**Status**: 🚧 Epic 1 In Progress | 2/10 Stories Complete
 
 **Last Updated**: 2025-10-20
