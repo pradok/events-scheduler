@@ -46,7 +46,7 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 | **Container** | Docker | 24.0.7 | Local development |
 | **Local AWS** | LocalStack | 3.1.0 | AWS service simulation |
 | **IaC** | AWS CDK | 2.122.0 | Infrastructure as Code |
-| **CI/CD** | GitHub Actions | - | Automated testing/deployment |
+| **CI/CD** | GitHub Actions | - | Automated testing/deployment (Future Phase) |
 | **Monorepo Tool** | npm workspaces | - | Monorepo management |
 | **Environment Config** | dotenv | 16.4.1 | Local environment variables |
 | **Lambda Bundler** | esbuild | 0.20.0 | Fast TypeScript compilation |

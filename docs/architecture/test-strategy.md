@@ -644,26 +644,31 @@ describe('ClaimReadyEventsUseCase', () => {
 
 ## Continuous Testing
 
-### CI Integration
+> **Note**: CI/CD integration is planned for a future phase. For now, all tests run locally.
+
+### Local Testing Workflow
 
 #### Unit Tests
-- **Trigger**: Every push to any branch
+- **Command**: `npm run test:unit`
+- **When**: During development, before commits
 - **Timeout**: 5 minutes
-- **Failure Action**: Block PR merge
 
 #### Integration Tests
-- **Trigger**: PR creation/update
+- **Command**: `npm run test:integration`
+- **When**: Before completing stories
 - **Timeout**: 10 minutes
-- **Failure Action**: Block PR merge
 
 #### E2E Tests
-- **Trigger**: Before merge to `main`
+- **Command**: `npm run test:e2e`
+- **When**: Before marking epic as complete
 - **Timeout**: 15 minutes
-- **Failure Action**: Block merge
 
-### GitHub Actions Example
+### CI/CD Integration (Future Phase)
+
+The following GitHub Actions example is provided for future implementation:
 
 ```yaml
+# .github/workflows/ci.yml (Future Phase)
 name: Test Suite
 
 on:

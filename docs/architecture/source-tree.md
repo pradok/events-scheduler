@@ -10,10 +10,10 @@ Reference: [Full Architecture Document](../architecture.md#source-tree)
 
 ```text
 bday/
-├── .github/
+├── .github/                            # (Future Phase - CI/CD)
 │   └── workflows/
-│       ├── ci.yml                      # GitHub Actions CI pipeline
-│       └── deploy.yml                  # Deployment workflow (Phase 2+)
+│       ├── ci.yml                      # GitHub Actions CI pipeline (Future)
+│       └── deploy.yml                  # Deployment workflow (Future)
 │
 ├── prisma/
 │   ├── schema.prisma                   # Prisma schema definition

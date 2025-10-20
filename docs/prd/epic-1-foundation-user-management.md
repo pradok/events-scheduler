@@ -1,6 +1,6 @@
 # Epic 1: Foundation & User Management
 
-**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database, CI/CD pipeline) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events. This epic proves the core domain model works correctly and validates timezone conversion logic early.
+**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events. This epic proves the core domain model works correctly and validates timezone conversion logic early.
 
 ---
 
@@ -57,7 +57,6 @@
 5. Prisma migration created and successfully applied to local database
 6. Prisma Client generated with full TypeScript types
 7. Database can be reset and reseeded for testing purposes
-8. Migration runs successfully in CI/CD environment
 
 ---
 
@@ -215,22 +214,3 @@
     - User update and event reschedule succeed together or fail together
     - No orphaned events after failed user update
     - Concurrent user updates don't create duplicate events (optimistic locking tested)
-
----
-
-## Story 1.10: CI/CD Pipeline Setup
-
-**As a** developer,
-**I want** a GitHub Actions CI/CD pipeline that runs tests and linting,
-**so that** code quality is enforced automatically on every commit.
-
-**Acceptance Criteria:**
-
-1. GitHub Actions workflow file created (.github/workflows/ci.yml)
-2. Workflow runs on push to main branch and all pull requests
-3. Workflow steps: install dependencies, run linting, run unit tests, run integration tests
-4. Workflow uses PostgreSQL service container for integration tests
-5. Workflow fails if linting has errors or warnings >10
-6. Workflow fails if test coverage is <80%
-7. Workflow fails if any tests fail
-8. Workflow status badge added to README.md
