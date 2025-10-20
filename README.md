@@ -174,6 +174,47 @@ docker logs bday-postgres
 npm run docker:reset
 ```
 
+### Database Schema & Migrations
+
+The project uses Prisma ORM for type-safe database access and migrations.
+
+#### Running Migrations
+
+```bash
+# Create and apply a new migration (development)
+npm run prisma:migrate
+
+# Generate Prisma Client (after schema changes)
+npm run prisma:generate
+```
+
+#### Seeding the Database
+
+```bash
+# Populate database with sample data
+npm run db:seed
+```
+
+This creates:
+- 3 sample users (John Doe, Jane Smith, Bob Johnson)
+- 3 sample birthday events with different timezones
+
+#### Resetting the Database
+
+```bash
+# WARNING: This deletes all data and reapplies migrations
+npm run db:reset
+```
+
+#### Viewing Database
+
+```bash
+# Open Prisma Studio (database GUI)
+npm run prisma:studio
+```
+
+This opens a web interface at http://localhost:5555 where you can view and edit data.
+
 ### Available Scripts
 
 | Script | Command | Description |
@@ -186,6 +227,11 @@ npm run docker:reset
 | **Docker Stop** | `npm run docker:stop` | Stop all Docker services |
 | **Docker Reset** | `npm run docker:reset` | Reset database (deletes all data) |
 | **Docker Logs** | `npm run docker:logs` | View logs for all services |
+| **Prisma Generate** | `npm run prisma:generate` | Generate Prisma Client |
+| **Prisma Migrate** | `npm run prisma:migrate` | Create and apply migrations |
+| **Prisma Studio** | `npm run prisma:studio` | Open database GUI |
+| **DB Seed** | `npm run db:seed` | Populate database with sample data |
+| **DB Reset** | `npm run db:reset` | Reset database (deletes all data, reapplies migrations, reseeds) |
 
 ### Code Quality
 
@@ -202,11 +248,17 @@ bday/
 │   ├── postgres/            # PostgreSQL initialization
 │   └── localstack/          # AWS service initialization
 │
-├── scripts/                 # Helper scripts (Story 1.2) ✅
+├── prisma/                  # Prisma ORM (Story 1.3) ✅
+│   ├── schema.prisma        # Database schema definition
+│   ├── migrations/          # Database migration files
+│   └── seed.ts              # Database seeding script
+│
+├── scripts/                 # Helper scripts (Story 1.2, 1.3) ✅
 │   ├── docker-start.sh      # Start Docker environment
 │   ├── docker-stop.sh       # Stop Docker services
 │   ├── docker-reset.sh      # Reset database
-│   └── docker-logs.sh       # View service logs
+│   ├── docker-logs.sh       # View service logs
+│   └── db-reset.sh          # Reset database with Prisma
 │
 ├── src/                     # Source code (Stories 1.4+)
 │   ├── domain/              # Pure business logic (Story 1.4, 1.5)
@@ -280,6 +332,7 @@ bday/
 
 - ✅ **Development Environment**: Docker Compose with PostgreSQL and LocalStack
 - ✅ **Build Tooling**: TypeScript strict mode, ESLint, Prettier, esbuild
+- ✅ **Database Schema**: Prisma ORM with migrations and seeding
 - ✅ **Code Quality**: Pre-commit hooks, linting, formatting enforcement
 - ✅ **Architecture Documentation**: Comprehensive design docs with BMAD workflow
 
@@ -318,7 +371,7 @@ bday/
 
 ### Current Phase: Epic 1 - Foundation & User Management 🚧
 
-**Progress**: 2/10 stories complete (20%)
+**Progress**: 3/9 stories complete (33%)
 
 #### Completed Stories ✅
 
@@ -336,23 +389,29 @@ bday/
 - Database initialization scripts (uuid-ossp extension)
 - Helper scripts for Docker operations
 
+**Story 1.3: Database Schema & Prisma Setup** ✅
+
+- Prisma ORM 5.9.1 configured with PostgreSQL
+- Complete database schema (users and events tables)
+- Initial migration created and applied
+- Database seeding with sample data
+- Prisma Client generated with full TypeScript types
+
 #### Next Up 📋
 
-**Story 1.3: Database Schema & Prisma Setup** ⏳ Next
+**Story 1.4: Domain Layer - User & Event Entities** ⏳ Next
 
-- Prisma ORM configuration
-- Database schema for users and events tables
-- Migrations and seeding
+- Pure domain entities with business logic
+- Value objects for type safety
+- Domain-driven design patterns
 
 **Upcoming in Epic 1:**
 
-- Story 1.4: Domain Layer - User & Event Entities
 - Story 1.5: Timezone Service
 - Story 1.6: Repository Port Interfaces
 - Story 1.7: Prisma Repository Implementations
 - Story 1.8: Create User Use Case
 - Story 1.9: User CRUD Use Cases & REST API
-- Story 1.10: CI/CD Pipeline Setup
 
 See [docs/prd/epic-1-foundation-user-management.md](docs/prd/epic-1-foundation-user-management.md) for full epic details.
 
@@ -394,6 +453,6 @@ ISC
 
 ---
 
-**Status**: 🚧 Epic 1 In Progress | 2/10 Stories Complete
+**Status**: 🚧 Epic 1 In Progress | 3/9 Stories Complete
 
 **Last Updated**: 2025-10-20

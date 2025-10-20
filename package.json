@@ -17,7 +17,15 @@
     "docker:stop": "./scripts/docker-stop.sh",
     "docker:reset": "./scripts/docker-reset.sh",
     "docker:logs": "./scripts/docker-logs.sh",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset",
     "prepare": "husky install"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "keywords": [
     "birthday",
@@ -43,6 +51,11 @@
     "husky": "8.0.3",
     "lint-staged": "15.2.0",
     "prettier": "3.2.5",
+    "prisma": "^5.9.1",
+    "ts-node": "^10.9.2",
     "typescript": "5.3.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.9.1"
   }
 }
