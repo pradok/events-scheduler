@@ -181,11 +181,31 @@ export type UserProps = z.infer<typeof UserPropsSchema>;
 
 ## Test Requirements
 
+### Test-Driven Development (TDD)
+
+**Strongly recommended when patterns are clear.** See [Test Strategy](test-strategy.md) for full guidance.
+
+**Use TDD for:**
+
+- Implementing well-defined interfaces (repository ports, use cases)
+- Following established patterns (value objects, entities, services)
+- Stories with clear acceptance criteria and tasks
+- Bug fixes with reproducible test cases
+
+**TDD Workflow:**
+
+1. **RED**: Write failing test defining desired behavior
+2. **GREEN**: Write minimal code to pass the test
+3. **REFACTOR**: Clean up while keeping tests green
+
+### General Test Requirements
+
 - Generate tests for all public methods and use case `execute()` functions
 - Cover edge cases: invalid inputs, boundary conditions, state transitions
 - Follow AAA pattern (Arrange, Act, Assert)
 - Mock all external dependencies (repositories, message senders, delivery adapters)
 - Minimum 80% code coverage for domain and application layers
+- 100% coverage for critical paths (see [Test Strategy](test-strategy.md))
 
 ---
 

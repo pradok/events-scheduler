@@ -9,9 +9,44 @@ Reference: [Full Architecture Document](../architecture.md)
 ## Testing Philosophy
 
 ### Approach
-- **Test-Driven Development (TDD)**: Encouraged but not mandatory
-- **Test-After**: Acceptable for Phase 1
+
+- **Test-Driven Development (TDD)**: **Strongly recommended when patterns are clear**
+- **TDD-First for Well-Defined Work**: Use TDD when tasks, interfaces, and patterns are established
+- **Test-After for Exploratory Work**: Acceptable when discovering new patterns or architectures
 - **Pragmatic Testing**: Focus on critical paths and business logic
+
+**When to Use TDD (Recommended):**
+
+✅ **Use TDD for:**
+
+- Implementing well-defined interfaces (e.g., repository ports from Story 1.6)
+- Following established patterns (e.g., new value objects, entities)
+- Adding new use cases with clear acceptance criteria
+- Implementing business logic with known requirements
+- Bug fixes with reproducible test cases
+
+⚠️ **Test-After acceptable for:**
+
+- Architectural exploration and prototyping
+- Initial pattern discovery
+- Proof-of-concept implementations
+- Infrastructure setup without clear contracts
+
+**TDD Workflow (Red-Green-Refactor):**
+
+1. **RED**: Write a failing test that defines desired behavior
+2. **GREEN**: Write minimal code to make the test pass
+3. **REFACTOR**: Clean up code while keeping tests green
+4. **REPEAT**: Continue until all acceptance criteria are met
+
+**Benefits of TDD:**
+
+- Ensures testable code design from the start
+- Prevents over-engineering (write only what's needed)
+- Living documentation through tests
+- Immediate feedback on breaking changes
+- Reduces debugging time
+- Forces thinking about contracts before implementation
 
 ### Coverage Goals
 - **Overall Coverage**: ≥80%
