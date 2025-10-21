@@ -30,14 +30,15 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 | **Runtime** | Node.js | 20.11.0 LTS | JavaScript runtime |
 | **Framework** | Fastify | 4.26.0 | REST API framework |
 | **Fastify Type Provider** | fastify-type-provider-zod | 2.0.0 | Zod integration for Fastify |
-| **ORM** | Prisma | 5.9.1 | Type-safe database client |
+| **ORM** | Prisma | 6.17.1 | Type-safe database client |
+| **Prisma Zod Generator** | prisma-zod-generator | 1.29.1 | Auto-generate Zod schemas from Prisma models |
 | **Date/Time** | Luxon | 3.4.4 | Timezone handling |
 | **Testing Framework** | Jest | 29.7.0 | Unit/Integration/E2E tests |
 | **Database** | PostgreSQL | 16.1 | Primary data store |
 | **API Gateway** | AWS API Gateway | REST API v1 | HTTP endpoint with authorization |
 | **Message Queue** | AWS SQS | - | Event buffering |
 | **Scheduler** | AWS EventBridge | - | Periodic triggers |
-| **Validation** | Zod | 3.25.1 | Runtime schema validation & type derivation |
+| **Validation** | Zod | 4.1.12 | Runtime schema validation & type derivation |
 | **Lambda Adapter** | @fastify/aws-lambda | 4.1.0 | Fastify → API Gateway integration |
 | **Linting** | ESLint | 8.56.0 | Code quality |
 | **Formatting** | Prettier | 3.2.5 | Code formatting |
@@ -89,15 +90,26 @@ Reference: [Full Architecture Document](../architecture.md#tech-stack)
 - `FOR UPDATE SKIP LOCKED` for atomic event claiming
 - Rich query capabilities for complex operations
 
-### Zod 3.25+ Over Joi
+### Zod 4.x Over Joi
 
 - **TypeScript-first validation** with `z.infer<>` for type derivation
 - **Single source of truth:** Schemas define both runtime validation AND compile-time types
 - **Type inference** eliminates duplication between validation rules and type definitions
 - **Modern API design** with excellent developer experience
 - **Schema changes automatically propagate** throughout codebase via derived types
-- **Version 3.25+** required for fastify-type-provider-zod compatibility
-- **Future-proof:** Includes both Zod v3 (stable) and v4 (beta) for easy migration when v4 is production-ready
+- **Version 4.1.12** required for prisma-zod-generator v1.29.1 compatibility
+- **Auto-generation from Prisma:** Use `prisma-zod-generator` to generate base Zod schemas from Prisma models, then extend with domain-specific types
+
+### prisma-zod-generator Integration
+
+- **Auto-sync with database schema:** Zod schemas automatically generated from Prisma models
+- **Pure model schemas only:** Configured to generate only model schemas (no CRUD bloat)
+- **Domain layer extension:** Generated schemas extended with domain-specific types (Luxon DateTime, value objects)
+- **Version requirements:**
+  - `prisma-zod-generator@1.29.1` (latest)
+  - `zod@4.1.12` (required by generator)
+  - `prisma@6.17.1` (required by generator)
+- **Configuration:** `pureModels: true`, all variants disabled, `mode: "custom"`
 
 ### Pino Over Winston
 

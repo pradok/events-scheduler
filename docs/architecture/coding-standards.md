@@ -117,6 +117,66 @@ export { CreateUserSchema, type CreateUserDTO };
 - Single location to update when requirements change
 - Fastify automatically validates requests and provides full type inference
 
+#### Prisma Zod Generator Integration
+
+For domain layer entity schemas, use `prisma-zod-generator` to auto-generate base schemas from Prisma models:
+
+**Architecture:**
+1. Prisma models define database structure (source of truth)
+2. Generator creates base Zod schemas automatically
+3. Extend generated schemas with domain-specific types
+
+**Configuration Requirements:**
+```json
+// prisma/zod-generator.config.json
+{
+  "mode": "custom",
+  "pureModels": true,
+  "variants": {
+    "pure": { "enabled": false },
+    "input": { "enabled": false },
+    "result": { "enabled": false }
+  }
+}
+```
+
+**Example Pattern:**
+```typescript
+// Generated: src/domain/schemas/generated/schemas/models/User.schema.ts
+export const UserSchema = z.object({
+  id: z.string(),
+  firstName: z.string(),
+  dateOfBirth: z.date(),  // Database type (JavaScript Date)
+  timezone: z.string(),
+  // ...
+});
+
+// Domain: src/domain/schemas/EntitySchemas.ts
+import { UserSchema as GeneratedUserSchema } from './generated/schemas/models/User.schema';
+
+// Extend with domain types
+export const UserPropsSchema = GeneratedUserSchema.extend({
+  dateOfBirth: DateOfBirthSchema,  // Domain type (value object)
+  timezone: TimezoneSchema,         // Domain type (value object)
+  createdAt: DateTimeSchema,        // Luxon DateTime
+  updatedAt: DateTimeSchema,        // Luxon DateTime
+});
+
+export type UserProps = z.infer<typeof UserPropsSchema>;
+```
+
+**Workflow:**
+1. Update Prisma schema (`prisma/schema.prisma`)
+2. Run `npm run prisma:generate`
+3. Generated schemas update automatically
+4. TypeScript compiler catches breaking changes in domain schemas
+5. Update domain schema extensions if needed
+
+**Version Requirements:**
+- `prisma@6.17.1+` (required for generator compatibility)
+- `zod@4.1.12+` (required for generator compatibility)
+- `prisma-zod-generator@1.29.1` (latest version with pure models support)
+
 ---
 
 ## Test Requirements
