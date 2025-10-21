@@ -104,53 +104,6 @@ describe('User', () => {
     });
   });
 
-  describe('calculateNextBirthday', () => {
-    it('should calculate next birthday when birthday has not passed this year', () => {
-      // Arrange
-      const user = new User({
-        ...validUserProps,
-        dateOfBirth: new DateOfBirth('1990-06-15'),
-      });
-      const referenceDate = DateTime.fromISO('2025-01-01T00:00:00');
-
-      // Act
-      const result = user.calculateNextBirthday(referenceDate);
-
-      // Assert
-      expect(result.year).toBe(2025);
-      expect(result.month).toBe(6);
-      expect(result.day).toBe(15);
-    });
-
-    it('should calculate next birthday in next year when birthday has passed', () => {
-      // Arrange
-      const user = new User({
-        ...validUserProps,
-        dateOfBirth: new DateOfBirth('1990-03-15'),
-      });
-      const referenceDate = DateTime.fromISO('2025-06-01T00:00:00');
-
-      // Act
-      const result = user.calculateNextBirthday(referenceDate);
-
-      // Assert
-      expect(result.year).toBe(2026);
-      expect(result.month).toBe(3);
-      expect(result.day).toBe(15);
-    });
-
-    it('should use current date when no reference date provided', () => {
-      // Arrange
-      const user = new User(validUserProps);
-
-      // Act
-      const result = user.calculateNextBirthday();
-
-      // Assert
-      expect(result.year).toBeGreaterThanOrEqual(DateTime.now().year);
-    });
-  });
-
   describe('updateTimezone', () => {
     it('should return new User instance with updated timezone', () => {
       // Arrange

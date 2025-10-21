@@ -50,8 +50,10 @@ Additionally, we use **Value Objects** (DDD pattern) for type-safe, validated da
 
 **Domain Behaviors:**
 
-- `calculateNextBirthday(currentDate: DateTime): DateTime` - Calculates the next occurrence of the user's birthday in their local timezone
 - `updateTimezone(newTimezone: Timezone): void` - Updates timezone and triggers recalculation of pending events
+- `updateName(firstName: string, lastName: string): void` - Updates user's name
+
+**Note:** Birthday calculation logic moved to `BirthdayEventHandler` (Strategy Pattern - Story 1.5). Use `BirthdayEventHandler.calculateNextOccurrence(user)` instead of `user.calculateNextBirthday()`.
 
 ---
 
@@ -186,14 +188,17 @@ class DateOfBirth {
     return { month: this.value.month, day: this.value.day };
   }
 
-  calculateNextOccurrence(timezone: Timezone): DateTime {
-    // Calculate next birthday in user's timezone
-  }
-
   toString(): string {
     return this.value.toISODate(); // YYYY-MM-DD
   }
+
+  equals(other: DateOfBirth): boolean {
+    return this.value.equals(other.value);
+  }
 }
+
+// Note: calculateNextOccurrence() method removed in Story 1.5
+// Birthday calculation moved to BirthdayEventHandler (Strategy Pattern)
 ```
 
 **Rationale:** Encapsulates birthday-specific logic (calculating next occurrence, handling leap years). Prevents invalid dates from entering the system.

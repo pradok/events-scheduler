@@ -39,14 +39,14 @@ bday/
 │   │   │   ├── IdempotencyKey.ts       # Idempotency key generator
 │   │   │   └── IdempotencyKey.test.ts  # IdempotencyKey unit tests
 │   │   ├── services/
-│   │   │   ├── TimezoneService.ts      # Timezone calculation logic
-│   │   │   ├── TimezoneService.test.ts # TimezoneService unit tests
-│   │   │   ├── event-handlers/         # Strategy pattern for event types
-│   │   │   │   ├── IEventHandler.ts    # Event handler interface
-│   │   │   │   ├── EventHandlerRegistry.ts
-│   │   │   │   ├── EventHandlerRegistry.test.ts
-│   │   │   │   ├── BirthdayEventHandler.ts       # Phase 1
-│   │   │   │   ├── BirthdayEventHandler.test.ts
+│   │   │   ├── TimezoneService.ts      # ✅ DONE (Story 1.5) - Timezone conversion utility
+│   │   │   ├── TimezoneService.test.ts # ✅ DONE (Story 1.5) - 15 tests
+│   │   │   ├── event-handlers/         # ✅ DONE (Story 1.5) - Strategy pattern for event types
+│   │   │   │   ├── IEventHandler.ts    # ✅ DONE (Story 1.5) - Event handler interface
+│   │   │   │   ├── EventHandlerRegistry.ts     # ✅ DONE (Story 1.5) - Strategy registry
+│   │   │   │   ├── EventHandlerRegistry.test.ts # ✅ DONE (Story 1.5) - 16 tests
+│   │   │   │   ├── BirthdayEventHandler.ts       # ✅ DONE (Story 1.5) - Birthday strategy
+│   │   │   │   ├── BirthdayEventHandler.test.ts  # ✅ DONE (Story 1.5) - 18 tests
 │   │   │   │   ├── AnniversaryEventHandler.ts    # Phase 2+
 │   │   │   │   ├── ReminderEventHandler.ts       # Phase 2+
 │   │   │   │   └── SubscriptionEventHandler.ts   # Phase 2+

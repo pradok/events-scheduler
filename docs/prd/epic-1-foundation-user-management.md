@@ -79,22 +79,26 @@
 
 ---
 
-## Story 1.5: Timezone Service
+## Story 1.5: Timezone Service & Strategy Pattern Implementation
 
 **As a** developer,
-**I want** a domain service that handles timezone conversions using Luxon,
-**so that** birthday events are correctly scheduled at 9:00 AM local time.
+**I want** a timezone conversion utility and Strategy Pattern for event type handling,
+**so that** birthday events are correctly scheduled at 9:00 AM local time and the system is extensible for future event types.
 
 **Acceptance Criteria:**
 
-1. TimezoneService created in `src/domain/services/TimezoneService.ts`
-2. Method `calculateNextBirthday(dateOfBirth, timezone)` returns next birthday at 9:00 AM local time
-3. Method `convertToUTC(localTimestamp, timezone)` converts local time to UTC
+1. TimezoneService created in `src/domain/services/TimezoneService.ts` as pure timezone utility
+2. Method `convertToUTC(localTimestamp, timezone)` converts local time to UTC
+3. Method `convertToLocalTime(utcTimestamp, timezone)` converts UTC to local time
 4. Service correctly handles DST transitions (spring forward, fall back)
-5. Service validates timezone against IANA timezone database
-6. Unit tests cover timezones: America/New_York, Europe/London, Asia/Tokyo, Australia/Sydney
-7. Unit tests cover DST transition edge cases (e.g., March 10, 2024 in New York)
-8. Unit tests achieve 100% coverage for TimezoneService
+5. IEventHandler interface created defining Strategy Pattern contract
+6. EventHandlerRegistry created for managing event type strategies
+7. BirthdayEventHandler implements calculateNextOccurrence() at 9:00 AM local time
+8. Unit tests cover timezones: America/New_York, Europe/London, Asia/Tokyo, Australia/Sydney
+9. Unit tests cover DST transition edge cases (e.g., March 10, 2024 in New York)
+10. Unit tests achieve 100% coverage for TimezoneService, EventHandlerRegistry, and BirthdayEventHandler
+
+**Implementation Note:** This story implements the Strategy Pattern documented in `docs/architecture/design-patterns.md`, allowing future event types (Anniversary, Reminder, etc.) to be added without modifying core logic.
 
 ---
 

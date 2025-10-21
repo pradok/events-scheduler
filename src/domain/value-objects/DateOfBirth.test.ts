@@ -1,6 +1,5 @@
 import { DateTime } from 'luxon';
 import { DateOfBirth } from './DateOfBirth';
-import { Timezone } from './Timezone';
 import {
   InvalidDateOfBirthError,
   DateOfBirthInFutureError,
@@ -57,82 +56,16 @@ describe('DateOfBirth', () => {
       // Assert
       expect(result).toEqual({ month: 12, day: 25 });
     });
-  });
 
-  describe('calculateNextOccurrence', () => {
-    it('should calculate next birthday in same year when birthday has not passed', () => {
-      // Arrange
-      const dob = new DateOfBirth('1990-06-15');
-      const timezone = new Timezone('America/New_York');
-      const referenceDate = DateTime.fromISO('2025-01-01T00:00:00');
-
-      // Act
-      const result = dob.calculateNextOccurrence(timezone, referenceDate);
-
-      // Assert
-      expect(result.year).toBe(2025);
-      expect(result.month).toBe(6);
-      expect(result.day).toBe(15);
-      expect(result.hour).toBe(9); // Default 9am
-    });
-
-    it('should calculate next birthday in next year when birthday has passed', () => {
-      // Arrange
-      const dob = new DateOfBirth('1990-03-15');
-      const timezone = new Timezone('America/New_York');
-      const referenceDate = DateTime.fromISO('2025-06-01T00:00:00');
-
-      // Act
-      const result = dob.calculateNextOccurrence(timezone, referenceDate);
-
-      // Assert
-      expect(result.year).toBe(2026);
-      expect(result.month).toBe(3);
-      expect(result.day).toBe(15);
-    });
-
-    it('should handle leap year birthday (Feb 29) in non-leap year', () => {
-      // Arrange
-      const dob = new DateOfBirth('1992-02-29'); // Leap year
-      const timezone = new Timezone('America/New_York');
-      const referenceDate = DateTime.fromISO('2025-01-01T00:00:00'); // 2025 is not a leap year
-
-      // Act
-      const result = dob.calculateNextOccurrence(timezone, referenceDate);
-
-      // Assert
-      expect(result.year).toBe(2025);
-      expect(result.month).toBe(3); // March
-      expect(result.day).toBe(1); // Day 1
-    });
-
-    it('should handle leap year birthday in leap year', () => {
+    it('should return correct month and day for leap year birthday', () => {
       // Arrange
       const dob = new DateOfBirth('1992-02-29');
-      const timezone = new Timezone('America/New_York');
-      const referenceDate = DateTime.fromISO('2024-01-01T00:00:00'); // 2024 is a leap year
 
       // Act
-      const result = dob.calculateNextOccurrence(timezone, referenceDate);
+      const result = dob.getMonthDay();
 
       // Assert
-      expect(result.year).toBe(2024);
-      expect(result.month).toBe(2);
-      expect(result.day).toBe(29);
-    });
-
-    it('should use default current date when referenceDate not provided', () => {
-      // Arrange
-      const dob = new DateOfBirth('1990-12-31');
-      const timezone = new Timezone('UTC');
-
-      // Act
-      const result = dob.calculateNextOccurrence(timezone);
-
-      // Assert
-      expect(result.month).toBe(12);
-      expect(result.day).toBe(31);
-      expect(result.year).toBeGreaterThanOrEqual(DateTime.now().year);
+      expect(result).toEqual({ month: 2, day: 29 });
     });
   });
 

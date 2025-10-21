@@ -45,18 +45,13 @@ export class User {
   }
 
   /**
-   * Calculates the next occurrence of the user's birthday
-   * @param currentDate The reference date (defaults to now)
-   * @returns The DateTime of the next birthday in the user's timezone
-   */
-  public calculateNextBirthday(currentDate: DateTime = DateTime.now()): DateTime {
-    return this.dateOfBirth.calculateNextOccurrence(this.timezone, currentDate);
-  }
-
-  /**
    * Updates the user's timezone (immutable - returns new instance)
    * @param newTimezone The new timezone
    * @returns A new User instance with updated timezone
+   *
+   * Note: Birthday calculation logic has been moved to BirthdayEventHandler
+   * as part of the Strategy Pattern refactoring. Use BirthdayEventHandler.calculateNextOccurrence()
+   * instead of User.calculateNextBirthday().
    */
   public updateTimezone(newTimezone: Timezone): User {
     return new User({

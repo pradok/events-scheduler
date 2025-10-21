@@ -3,11 +3,14 @@ import {
   InvalidDateOfBirthError,
   DateOfBirthInFutureError,
 } from '../errors/InvalidDateOfBirthError';
-import { Timezone } from './Timezone';
 
 /**
  * DateOfBirth value object
  * Type-safe representation of a date of birth with validation
+ *
+ * Note: Birthday calculation logic has been moved to BirthdayEventHandler
+ * as part of the Strategy Pattern refactoring. DateOfBirth is now a pure
+ * value object focused solely on representing and validating birthdates.
  */
 export class DateOfBirth {
   private readonly value: DateTime;
@@ -28,75 +31,6 @@ export class DateOfBirth {
    */
   public getMonthDay(): { month: number; day: number } {
     return { month: this.value.month, day: this.value.day };
-  }
-
-  /**
-   * Calculates the next occurrence of this birthday in the given timezone
-   * @param timezone The timezone to calculate in
-   * @param referenceDate The reference date (defaults to now)
-   */
-  public calculateNextOccurrence(
-    timezone: Timezone,
-    referenceDate: DateTime = DateTime.now()
-  ): DateTime {
-    const { month, day } = this.getMonthDay();
-    const refInZone = referenceDate.setZone(timezone.toString());
-    const currentYear = refInZone.year;
-
-    // Determine if this is a leap year birthday (Feb 29)
-    const isLeapYearBirthday = month === 2 && day === 29;
-
-    // Helper to check if a year is a leap year
-    const isLeapYear = (year: number): boolean => {
-      return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    };
-
-    // Set the birthday for the current year (or adjust for non-leap year)
-    let targetMonth = month;
-    let targetDay = day;
-    if (isLeapYearBirthday && !isLeapYear(currentYear)) {
-      // Feb 29 in non-leap year becomes Mar 1
-      targetMonth = 3;
-      targetDay = 1;
-    }
-
-    let nextBirthday = refInZone.set({
-      month: targetMonth,
-      day: targetDay,
-      hour: 9,
-      minute: 0,
-      second: 0,
-      millisecond: 0,
-    });
-
-    // If birthday has already passed this year, move to next year
-    if (nextBirthday < refInZone) {
-      const nextYear = currentYear + 1;
-      if (isLeapYearBirthday && !isLeapYear(nextYear)) {
-        // Feb 29 in non-leap year becomes Mar 1
-        nextBirthday = refInZone.set({
-          year: nextYear,
-          month: 3,
-          day: 1,
-          hour: 9,
-          minute: 0,
-          second: 0,
-          millisecond: 0,
-        });
-      } else {
-        nextBirthday = refInZone.set({
-          year: nextYear,
-          month,
-          day,
-          hour: 9,
-          minute: 0,
-          second: 0,
-          millisecond: 0,
-        });
-      }
-    }
-
-    return nextBirthday;
   }
 
   /**

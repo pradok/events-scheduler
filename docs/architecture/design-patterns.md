@@ -24,6 +24,13 @@ All patterns follow **Domain-Driven Design** principles with zero infrastructure
 
 ## 1. Strategy Pattern - Event Type Handlers
 
+**Status: IMPLEMENTED in Story 1.5** ✅
+
+**Implementation Files:**
+- `src/domain/services/event-handlers/IEventHandler.ts`
+- `src/domain/services/event-handlers/EventHandlerRegistry.ts`
+- `src/domain/services/event-handlers/BirthdayEventHandler.ts`
+
 **Purpose:** Enable adding new event types (Anniversary, Reminder, Subscription) without modifying core scheduler or executor logic.
 
 ### IEventHandler Interface
@@ -95,11 +102,13 @@ class BirthdayEventHandler implements IEventHandler {
   }
 
   calculateNextOccurrence(user: User): DateTime {
-    return this.timezoneService.calculateNextBirthday(
-      user.dateOfBirth,
-      user.timezone,
-      DateTime.now()
-    );
+    // Birthday calculation logic is implemented directly in BirthdayEventHandler
+    // (see Story 1.5 - actual implementation in src/domain/services/event-handlers/BirthdayEventHandler.ts)
+    const { month, day } = user.dateOfBirth.getMonthDay();
+    // ... handles leap years (Feb 29 → Feb 28 in non-leap years)
+    // ... calculates next occurrence at 9:00 AM local time
+    // ... uses TimezoneService for UTC conversion only
+    return nextBirthdayAt9AM; // Simplified for documentation
   }
 }
 ```
