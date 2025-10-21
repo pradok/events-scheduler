@@ -5,6 +5,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator zod {
+  provider = "prisma-zod-generator"
+  output   = "../src/domain/schemas/generated"
+  config   = "./zod-generator.config.json"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
