@@ -2,9 +2,9 @@
 . "$(dirname -- "$0")/_/husky.sh"
 
 # Check for AI tool references in staged files (excluding hook files and docs/qa)
-STAGED_FILES=$(git diff --cached --name-only | grep -v -E "^\.husky/|^docs/qa/")
+STAGED_FILES=$(git diff --cached --name-only | grep -v -E "^\.husky/|^docs/qa/" || true)
 if [ -n "$STAGED_FILES" ]; then
-  FORBIDDEN_REFS=$(echo "$STAGED_FILES" | xargs grep -l "Claude Code\|claude\.com/claude-code" 2>/dev/null)
+  FORBIDDEN_REFS=$(echo "$STAGED_FILES" | xargs grep -l "Claude Code\|claude\.com/claude-code" 2>/dev/null || true)
   if [ -n "$FORBIDDEN_REFS" ]; then
     echo ""
     echo "❌ ERROR: Found AI tool reference in staged files:"
