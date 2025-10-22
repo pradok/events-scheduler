@@ -341,5 +341,77 @@ describe('PrismaEventRepository - Integration Tests', () => {
       // Assert
       expect(claimedEvents.length).toBe(0);
     });
+
+    it('should prevent duplicate claims when called concurrently (FOR UPDATE SKIP LOCKED)', async () => {
+      /**
+       * This test verifies the critical concurrency guarantee of claimReadyEvents():
+       * When multiple scheduler instances run simultaneously, each event should be
+       * claimed by EXACTLY ONE instance (no duplicates, no missed events).
+       *
+       * This is the PRIMARY reason we use raw SQL with FOR UPDATE SKIP LOCKED:
+       * - FOR UPDATE: Locks rows during transaction
+       * - SKIP LOCKED: Skips rows already locked by other transactions (no deadlocks)
+       *
+       * Without this mechanism, multiple schedulers would process the same events,
+       * resulting in duplicate birthday messages, emails, etc.
+       */
+
+      // Arrange - create 10 ready-to-process events (targetTimestampUTC in the past)
+      const pastTime = DateTime.now().minus({ minutes: 5 });
+      const eventIds: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const id = randomUUID();
+        eventIds.push(id);
+        await prisma.event.create({
+          data: {
+            id,
+            userId: testUserId,
+            eventType: 'BIRTHDAY',
+            status: 'PENDING',
+            targetTimestampUTC: pastTime.toJSDate(),
+            targetTimestampLocal: pastTime.toJSDate(),
+            targetTimezone: 'America/New_York',
+            idempotencyKey: `test-key-${randomUUID()}`,
+            deliveryPayload: {},
+          },
+        });
+      }
+
+      // Act - simulate 3 concurrent scheduler instances claiming events
+      // This mimics a production scenario with multiple worker pods/processes
+      // Each instance tries to claim up to 5 events (total request = 15 events)
+      const [claimed1, claimed2, claimed3] = await Promise.all([
+        repository.claimReadyEvents(5), // Instance 1: request 5 events
+        repository.claimReadyEvents(5), // Instance 2: request 5 events
+        repository.claimReadyEvents(5), // Instance 3: request 5 events
+      ]);
+
+      // Assert - collect all claimed event IDs from all instances
+      const allClaimedIds = [
+        ...claimed1.map((e) => e.id),
+        ...claimed2.map((e) => e.id),
+        ...claimed3.map((e) => e.id),
+      ];
+
+      // CRITICAL: Verify no duplicates across instances
+      // If FOR UPDATE SKIP LOCKED wasn't working, we'd see duplicate IDs here
+      const uniqueClaimedIds = new Set(allClaimedIds);
+      expect(uniqueClaimedIds.size).toBe(10); // All 10 events claimed
+      expect(allClaimedIds.length).toBe(uniqueClaimedIds.size); // No duplicates
+
+      // Verify all original events were claimed (none missed)
+      eventIds.forEach((id) => {
+        expect(uniqueClaimedIds.has(id)).toBe(true);
+      });
+
+      // Verify database state: all events transitioned to PROCESSING with version 2
+      // This confirms the UPDATE portion of claimReadyEvents() executed correctly
+      const dbEvents = await prisma.event.findMany({
+        where: { id: { in: eventIds } },
+      });
+      expect(dbEvents.length).toBe(10);
+      expect(dbEvents.every((e) => e.status === 'PROCESSING')).toBe(true);
+      expect(dbEvents.every((e) => e.version === 2)).toBe(true); // Version incremented from 1 to 2
+    });
   });
 });

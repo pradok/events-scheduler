@@ -221,6 +221,9 @@ This opens a web interface at http://localhost:5555 where you can view and edit 
 |--------|---------|-------------|
 | **Build** | `npm run build` | Compile TypeScript to JavaScript using esbuild |
 | **Build Watch** | `npm run build:watch` | Compile with watch mode for development |
+| **Test** | `npm test` | Run all tests (unit + integration) |
+| **Test Watch** | `npm run test:watch` | Run tests in watch mode |
+| **Test Coverage** | `npm run test:coverage` | Generate test coverage report |
 | **Lint** | `npm run lint` | Run ESLint on source files |
 | **Format** | `npm run format` | Format code with Prettier |
 | **Docker Start** | `npm run docker:start` | Start PostgreSQL and LocalStack |
@@ -344,12 +347,136 @@ bday/
 
 ---
 
-## Testing Strategy (Future)
+## Testing
 
-- **Unit Tests**: Domain entities, value objects, services (100% coverage target)
-- **Integration Tests**: Repository implementations, use cases (80% coverage target)
-- **E2E Tests**: Full user workflows with real database
-- **Test Organization**: Colocated `*.test.ts` files or parallel `tests/` directory
+The project uses **Jest** for testing with a comprehensive test suite covering unit, integration, and E2E tests.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (during development)
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+
+# Run specific test file
+npm test -- PrismaEventRepository.test.ts
+
+# Run tests matching a pattern
+npm test -- -t "should prevent duplicate claims"
+```
+
+### Test Types
+
+#### Integration Tests ✅ Implemented
+
+Integration tests verify adapter implementations with real database connections:
+
+```bash
+# Run integration tests (requires Docker PostgreSQL)
+npm run docker:start
+npm test
+```
+
+**Key integration tests:**
+- **Repository implementations**: PrismaEventRepository, PrismaUserRepository
+- **Database transactions**: Verify atomicity and isolation
+- **Concurrency tests**: Distributed scheduler with `FOR UPDATE SKIP LOCKED`
+- **Optimistic locking**: Version-based concurrency control
+
+**Location:** `src/__tests__/integration/`
+
+#### Unit Tests 🚧 In Progress
+
+Unit tests cover domain entities, value objects, and services:
+
+- **Domain entities**: User, Event business logic
+- **Value objects**: EventStatus, IdempotencyKey, Timezone
+- **Services**: TimezoneService, EventHandlerRegistry
+
+**Target coverage:** 100% for domain layer
+
+#### E2E Tests 📋 Planned
+
+End-to-end tests will verify complete user workflows with real database and services.
+
+### Testing Infrastructure
+
+**Test Database:**
+- PostgreSQL 16 in Docker via Testcontainers
+- Automatic schema migration before tests
+- Database cleanup between test suites
+
+**Test Helpers:**
+- `testDatabase.ts` - Database lifecycle management
+- Builders for domain entities (User, Event)
+- Fixture data generators
+
+### Testing Connection Pooling (Advanced)
+
+For testing Lambda connection pooling behavior locally with PgBouncer, see:
+- [Local Development - Connection Pooling Testing](docs/architecture/local-development.md#connection-pooling-testing)
+
+This covers:
+- Setting up PgBouncer with Docker
+- Testing connection reuse efficiency
+- Verifying FOR UPDATE SKIP LOCKED works with pooling
+- Monitoring connection pool statistics
+
+### Test Organization
+
+Tests are colocated with source code in `__tests__` directories:
+
+```
+src/
+├── __tests__/
+│   ├── integration/     # Integration tests with real DB
+│   │   ├── adapters/
+│   │   │   └── secondary/
+│   │   │       └── persistence/
+│   │   │           └── PrismaEventRepository.test.ts
+│   │   └── helpers/
+│   │       └── testDatabase.ts
+│   └── unit/            # Unit tests (coming soon)
+│
+├── domain/
+│   └── entities/
+│       └── User.test.ts  # Unit tests colocated
+```
+
+### Coverage Targets
+
+| Layer | Target | Current |
+|-------|--------|---------|
+| **Domain** | 100% | 🚧 In progress |
+| **Application** | 80% | 📋 Planned |
+| **Adapters** | 80% | ✅ ~90% |
+
+### Key Test Cases
+
+**Distributed Scheduler Concurrency:**
+```typescript
+// Verifies FOR UPDATE SKIP LOCKED prevents duplicate claims
+it('should prevent duplicate claims when called concurrently', async () => {
+  // 10 PENDING events, 3 concurrent claimReadyEvents() calls
+  // Result: All 10 events claimed exactly once, no duplicates
+});
+```
+
+**Optimistic Locking:**
+```typescript
+// Verifies version-based concurrency control
+it('should fail with stale version (optimistic locking)', async () => {
+  // Update event → succeeds
+  // Try to update with stale version → throws OptimisticLockError
+});
+```
+
+See [Test Strategy](docs/architecture/test-strategy.md) for complete testing documentation.
 
 ---
 
@@ -360,10 +487,32 @@ bday/
 | Document | Description |
 |----------|-------------|
 | [Architecture](docs/architecture.md) | System architecture and design patterns |
+| [Design Patterns](docs/architecture/design-patterns.md) | Distributed Scheduler Pattern, FOR UPDATE SKIP LOCKED |
+| [Local Development](docs/architecture/local-development.md) | Docker setup, testing, PgBouncer connection pooling |
+| [Infrastructure](docs/architecture/infrastructure.md) | AWS deployment (Lambda, ECS/EKS, RDS Proxy) |
+| [Test Strategy](docs/architecture/test-strategy.md) | Testing approaches and coverage targets |
 | [PRD](docs/prd.md) | Product requirements and user stories |
 | [Tech Stack](docs/architecture/tech-stack.md) | Technology choices and rationale |
 | [Coding Standards](docs/architecture/coding-standards.md) | Development guidelines |
 | [Source Tree](docs/architecture/source-tree.md) | Project structure details |
+
+### Quick Start Guides
+
+| Topic | Document | Section |
+|-------|----------|---------|
+| **Get Started Locally** | [Local Development](docs/architecture/local-development.md#quick-start) | Setup in 4 steps |
+| **Run Tests** | [Local Development](docs/architecture/local-development.md#testing) | Unit, integration, E2E tests |
+| **Connection Pooling** | [Local Development](docs/architecture/local-development.md#connection-pooling-testing) | PgBouncer setup and testing |
+| **Database Management** | [Local Development](docs/architecture/local-development.md#database-management) | Migrations, seeding, Prisma Studio |
+
+### Key Technical Topics
+
+| Topic | Document | Section |
+|-------|----------|---------|
+| **Distributed Scheduler** | [Design Patterns](docs/architecture/design-patterns.md#8-distributed-scheduler-pattern---concurrent-job-claiming) | FOR UPDATE SKIP LOCKED explanation |
+| **Lambda vs Containers** | [Infrastructure](docs/architecture/infrastructure.md#scheduler-deployment-options) | Deployment architecture comparison |
+| **Query Performance** | [Design Patterns](docs/architecture/design-patterns.md#query-performance-and-indexing) | Index optimization guide |
+| **Concurrency Testing** | [Local Development](docs/architecture/local-development.md#connection-pooling-testing) | Integration test examples |
 
 ---
 

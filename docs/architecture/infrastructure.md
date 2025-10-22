@@ -571,3 +571,613 @@ Automatic rollback triggered when:
 - **Production**: $300-500 (depending on scale)
 
 ---
+
+## Scheduler Deployment Options
+
+The event scheduler component can be deployed in different architectures depending on scale, cost, and operational requirements. All deployment options use the **Distributed Scheduler Pattern** with PostgreSQL row-level locking (`FOR UPDATE SKIP LOCKED`) to prevent duplicate event processing.
+
+### Overview of Deployment Models
+
+| Model | Best For | Pros | Cons |
+|-------|----------|------|------|
+| **Serverless (Lambda)** | Variable workloads, cost optimization | Auto-scaling, pay-per-use, zero ops | Cold starts, connection limits |
+| **Long-Running (ECS/EKS)** | Continuous high-volume | Predictable latency, simple connections | Always-on costs, manual scaling |
+| **Hybrid** | Mixed workloads | Best of both worlds | More complex architecture |
+
+### The Core Pattern: FOR UPDATE SKIP LOCKED
+
+**All deployment models rely on the same concurrency control mechanism:**
+
+```sql
+-- Atomic event claiming with row-level locking
+SELECT * FROM events
+WHERE status = 'PENDING'
+  AND target_timestamp_utc <= NOW()
+ORDER BY target_timestamp_utc ASC
+LIMIT 100
+FOR UPDATE SKIP LOCKED
+```
+
+**Why this matters:**
+- ✅ **Multiple instances** can safely claim different events concurrently
+- ✅ **No coordination required** between scheduler instances
+- ✅ **No duplicate processing** - each event claimed exactly once
+- ✅ **No deadlocks** - SKIP LOCKED prevents waiting
+
+**See:** [Design Patterns - Distributed Scheduler Pattern](./design-patterns.md#8-distributed-scheduler-pattern---concurrent-job-claiming) for detailed explanation.
+
+---
+
+### Option 1: Serverless Lambda (Phase 2 Default)
+
+**Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ EventBridge Rule (every 1 minute)                        │
+└───────────────────┬──────────────────────────────────────┘
+                    │ triggers
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ Lambda: ClaimAndProcessEvents                            │
+│ - Concurrency: 10 instances (configurable)               │
+│ - Each claims 100 events via FOR UPDATE SKIP LOCKED      │
+│ - Memory: 1024 MB                                        │
+│ - Timeout: 5 minutes                                     │
+└───────────────────┬──────────────────────────────────────┘
+                    │ connects via
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ RDS Proxy (Connection Pooling)                           │
+│ - Max connections: 100                                   │
+│ - Multiplexing enabled                                   │
+└───────────────────┬──────────────────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ RDS PostgreSQL                                           │
+│ - FOR UPDATE SKIP LOCKED prevents duplicates             │
+└──────────────────────────────────────────────────────────┘
+```
+
+#### Implementation
+
+```typescript
+// Lambda handler
+import { PrismaClient } from '@prisma/client';
+
+// Global instance (reused across warm invocations)
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL, // Points to RDS Proxy
+    },
+  },
+});
+
+export const handler = async (event: ScheduledEvent) => {
+  const batchSize = 100;
+
+  // Claim events with row-level locking
+  const claimedEvents = await prisma.$transaction(async (tx) => {
+    const events = await tx.$queryRaw<Array<RawEvent>>`
+      SELECT * FROM events
+      WHERE status = 'PENDING'
+        AND target_timestamp_utc <= NOW()
+      ORDER BY target_timestamp_utc ASC
+      LIMIT ${batchSize}
+      FOR UPDATE SKIP LOCKED
+    `;
+
+    if (events.length === 0) return [];
+
+    await tx.event.updateMany({
+      where: { id: { in: events.map(e => e.id) } },
+      data: { status: 'PROCESSING', version: { increment: 1 } },
+    });
+
+    return events;
+  }, {
+    timeout: 5000, // 5 second max transaction
+  });
+
+  // Process events
+  for (const event of claimedEvents) {
+    await processEvent(event);
+  }
+
+  return { processed: claimedEvents.length };
+};
+```
+
+#### Configuration
+
+```yaml
+# serverless.yml or CDK
+functions:
+  scheduler:
+    handler: src/scheduler.handler
+    timeout: 300 # 5 minutes
+    memorySize: 1024 # 1 GB
+    reservedConcurrency: 10 # Max 10 concurrent Lambdas
+    environment:
+      DATABASE_URL: ${env:RDS_PROXY_ENDPOINT}
+    events:
+      - schedule:
+          rate: rate(1 minute)
+          enabled: true
+```
+
+#### Critical Requirements for Lambda
+
+**1. Connection Pooling (MANDATORY)**
+
+```typescript
+// ❌ BAD: New Prisma instance per invocation
+export const handler = async () => {
+  const prisma = new PrismaClient(); // Creates new connection pool!
+  await prisma.event.claimReadyEvents(100);
+  await prisma.$disconnect(); // Closes connections
+};
+
+// ✅ GOOD: Reuse Prisma instance
+const prisma = new PrismaClient(); // Outside handler - global scope
+
+export const handler = async () => {
+  await prisma.event.claimReadyEvents(100);
+  // Don't disconnect - instance reused on next warm start
+};
+```
+
+**Why RDS Proxy is Required:**
+- Lambdas are stateless - each invocation could create new connections
+- 10 concurrent Lambdas × 10 connections each = 100 database connections
+- RDS Proxy pools connections, reducing database load
+- Without it: Risk exhausting database connection limit (default 100)
+
+**2. Transaction Timeout**
+
+```typescript
+// Set explicit timeout to prevent Lambda timeout errors
+await prisma.$transaction(async (tx) => {
+  // ... claim events
+}, {
+  timeout: 5000, // Must be < Lambda timeout
+});
+```
+
+**3. Warm Start Optimization**
+
+```yaml
+# CDK: Keep Lambdas warm to avoid cold starts
+provisionedConcurrentExecutions: 2 # Always keep 2 warm instances
+```
+
+#### Scaling Behavior
+
+**Example Scenario: 1,000 events ready to process**
+
+```
+Time: 00:00 - EventBridge triggers Lambda
+
+Instance 1: Claims events 1-100    (FOR UPDATE SKIP LOCKED)
+Instance 2: Claims events 101-200  (skips 1-100, locked)
+Instance 3: Claims events 201-300  (skips 1-200, locked)
+...
+Instance 10: Claims events 901-1000
+
+Total processing time: ~5 minutes (all instances work in parallel)
+```
+
+**Throughput calculation:**
+- 10 concurrent Lambdas
+- 100 events per Lambda
+- 1 minute trigger interval
+- **Theoretical max: 60,000 events/hour**
+
+#### Pros and Cons
+
+**✅ Pros:**
+- **Cost efficient**: Pay only for execution time
+- **Auto-scaling**: AWS handles scaling (0 to 1000s of instances)
+- **No infrastructure management**: Fully managed
+- **Good for variable workloads**: Birthday events spike in certain months
+- **FOR UPDATE SKIP LOCKED works perfectly**: Fast atomic transactions
+
+**❌ Cons:**
+- **Cold starts**: 1-3 second initialization delay
+- **Connection pooling required**: Must use RDS Proxy
+- **15-minute max timeout**: Not suitable for very long processing
+- **More complex debugging**: Distributed traces across many invocations
+
+**Best for:**
+- Variable event volume (seasonal patterns)
+- Cost-sensitive deployments
+- Event-driven architectures
+- When you want to minimize operational overhead
+
+---
+
+### Option 2: Long-Running Containers (ECS/EKS)
+
+**Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Kubernetes/ECS: Scheduler Deployment                     │
+│ - Replicas: 3 pods (horizontal pod autoscaler)           │
+│ - Each pod runs infinite loop checking for events        │
+│ - Built-in connection pooling via Prisma                 │
+└───────────────────┬──────────────────────────────────────┘
+                    │ direct connection
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ RDS PostgreSQL                                           │
+│ - FOR UPDATE SKIP LOCKED prevents duplicates             │
+│ - Fewer connections (3 pods vs 10 Lambdas)               │
+└──────────────────────────────────────────────────────────┘
+```
+
+#### Implementation
+
+```typescript
+// Continuous scheduler process
+class EventScheduler {
+  constructor(private prisma: PrismaClient) {}
+
+  async start() {
+    console.log('Scheduler started');
+
+    while (true) {
+      try {
+        // Claim and process events
+        const events = await this.claimReadyEvents(100);
+
+        if (events.length > 0) {
+          console.log(`Claimed ${events.length} events`);
+          await this.processEvents(events);
+        }
+
+        // Sleep for 10 seconds before next poll
+        await sleep(10000);
+      } catch (error) {
+        console.error('Scheduler error:', error);
+        await sleep(5000); // Back off on error
+      }
+    }
+  }
+
+  private async claimReadyEvents(limit: number): Promise<Event[]> {
+    return this.prisma.$transaction(async (tx) => {
+      const events = await tx.$queryRaw<Array<RawEvent>>`
+        SELECT * FROM events
+        WHERE status = 'PENDING'
+          AND target_timestamp_utc <= NOW()
+        ORDER BY target_timestamp_utc ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `;
+
+      if (events.length === 0) return [];
+
+      await tx.event.updateMany({
+        where: { id: { in: events.map(e => e.id) } },
+        data: { status: 'PROCESSING', version: { increment: 1 } },
+      });
+
+      return events.map(eventToDomain);
+    });
+  }
+
+  private async processEvents(events: Event[]): Promise<void> {
+    // Process in parallel
+    await Promise.allSettled(
+      events.map(event => this.processEvent(event))
+    );
+  }
+}
+
+// Entry point
+const prisma = new PrismaClient();
+const scheduler = new EventScheduler(prisma);
+scheduler.start();
+```
+
+#### Kubernetes Configuration
+
+```yaml
+# k8s/scheduler-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-scheduler
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: event-scheduler
+  template:
+    metadata:
+      labels:
+        app: event-scheduler
+    spec:
+      containers:
+      - name: scheduler
+        image: your-repo/event-scheduler:latest
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: url
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: event-scheduler-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event-scheduler
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+#### Scaling Behavior
+
+**Example Scenario: 1,000 events ready to process**
+
+```
+Pod 1: Polls every 10s, claims events 1-100
+Pod 2: Polls every 10s, claims events 101-200
+Pod 3: Polls every 10s, claims events 201-300
+
+Next poll (10 seconds later):
+Pod 1: Claims events 301-400
+Pod 2: Claims events 401-500
+Pod 3: Claims events 501-600
+
+... continues until all events processed
+
+Total processing time: ~40 seconds (3 pods × 100 events per poll)
+```
+
+#### Pros and Cons
+
+**✅ Pros:**
+- **No cold starts**: Always running, instant processing
+- **Simple connection management**: Built-in Prisma connection pooling
+- **Predictable costs**: Fixed hourly rate
+- **No timeout limits**: Can run indefinitely
+- **Better for continuous high-volume**: Processes events faster
+
+**❌ Cons:**
+- **Always-on costs**: Pay even when idle
+- **Manual scaling**: Need to configure HPA and monitor
+- **Infrastructure management**: Need to manage Kubernetes/ECS
+- **Over-provisioning risk**: May pay for unused capacity
+
+**Best for:**
+- Continuous high-volume processing
+- Predictable workloads
+- When cold starts are unacceptable
+- Need for sub-second latency
+
+---
+
+### Option 3: Hybrid (Two-Stage Lambda)
+
+**Architecture for Long Event Processing:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ EventBridge Rule (every 1 minute)                        │
+└───────────────────┬──────────────────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ Lambda 1: ClaimEvents (fast, <5 seconds)                 │
+│ - Claims events with FOR UPDATE SKIP LOCKED              │
+│ - Pushes to SQS queue                                    │
+└───────────────────┬──────────────────────────────────────┘
+                    │ sends messages to
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ SQS Queue (standard)                                     │
+│ - Decouples claiming from processing                     │
+│ - Built-in retry logic                                   │
+└───────────────────┬──────────────────────────────────────┘
+                    │ triggers (batch of 10)
+                    ▼
+┌──────────────────────────────────────────────────────────┐
+│ Lambda 2: ProcessEvent (can be slow)                     │
+│ - Processes individual events                            │
+│ - Updates status to COMPLETED/FAILED                     │
+└──────────────────────────────────────────────────────────┘
+```
+
+#### Implementation
+
+```typescript
+// Lambda 1: Claim events (fast)
+export const claimHandler = async () => {
+  const events = await prisma.$transaction(async (tx) => {
+    const events = await tx.$queryRaw`
+      SELECT * FROM events
+      WHERE status = 'PENDING'
+        AND target_timestamp_utc <= NOW()
+      LIMIT 100
+      FOR UPDATE SKIP LOCKED
+    `;
+
+    if (events.length === 0) return [];
+
+    await tx.event.updateMany({
+      where: { id: { in: events.map(e => e.id) } },
+      data: { status: 'PROCESSING' },
+    });
+
+    return events;
+  });
+
+  // Push to SQS
+  for (const event of events) {
+    await sqs.sendMessage({
+      QueueUrl: process.env.PROCESSING_QUEUE_URL,
+      MessageBody: JSON.stringify(event),
+    });
+  }
+
+  return { claimed: events.length };
+};
+
+// Lambda 2: Process events (can be slow)
+export const processHandler = async (sqsEvent: SQSEvent) => {
+  for (const record of sqsEvent.Records) {
+    const event = JSON.parse(record.body);
+
+    try {
+      // Process event (can take time - send email, webhook, etc.)
+      await processEvent(event);
+
+      // Mark as completed
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { status: 'COMPLETED', executedAt: new Date() },
+      });
+    } catch (error) {
+      // Mark as failed
+      await prisma.event.update({
+        where: { id: event.id },
+        data: {
+          status: 'FAILED',
+          failureReason: error.message,
+          retryCount: { increment: 1 },
+        },
+      });
+      throw error; // Let SQS retry
+    }
+  }
+};
+```
+
+#### Pros and Cons
+
+**✅ Pros:**
+- **Best of both worlds**: Fast claiming (no timeout), slow processing (can retry)
+- **Better observability**: SQS provides queue metrics
+- **Automatic retries**: SQS handles failed processing
+- **Decoupled**: Claiming and processing scale independently
+
+**❌ Cons:**
+- **More complex**: Two Lambda functions + SQS
+- **Higher latency**: Event sits in queue before processing
+- **More cost**: SQS requests add cost
+
+**Best for:**
+- Event processing takes >1 minute (webhooks, external APIs)
+- Need robust retry logic
+- Want to decouple claim from process
+
+---
+
+### Comparison Matrix
+
+| Aspect | Lambda (Single-Stage) | Long-Running (ECS/EKS) | Hybrid (Lambda + SQS) |
+|--------|----------------------|------------------------|----------------------|
+| **Cold Start** | ⚠️ 1-3s | ✅ None | ⚠️ 1-3s |
+| **Connection Pooling** | ⚠️ Requires RDS Proxy | ✅ Built-in | ⚠️ Requires RDS Proxy |
+| **Scaling** | ✅ Auto (instant) | ⚠️ HPA (1-2 min) | ✅ Auto (instant) |
+| **Cost (low volume)** | ✅ Pay-per-use | ❌ Always-on | ⚠️ Medium |
+| **Cost (high volume)** | ⚠️ Can be expensive | ✅ Fixed | ⚠️ Medium |
+| **Max Processing Time** | ❌ 15 minutes | ✅ Unlimited | ✅ Unlimited |
+| **Observability** | ⚠️ Distributed traces | ✅ Centralized logs | ✅ SQS metrics |
+| **Retry Logic** | ⚠️ Manual | ⚠️ Manual | ✅ Built-in (SQS) |
+| **FOR UPDATE SKIP LOCKED** | ✅ Works | ✅ Works | ✅ Works |
+| **Duplicate Prevention** | ✅ Database-level | ✅ Database-level | ✅ Database-level |
+
+---
+
+### Recommendations
+
+**Choose Serverless Lambda if:**
+- Variable event volume (birthdays seasonal)
+- Want to minimize operational overhead
+- Budget-conscious (pay only when processing)
+- Can tolerate 1-3s cold start delay
+- Event processing completes in <5 minutes
+
+**Choose Long-Running Containers if:**
+- Continuous high-volume processing
+- Need predictable sub-second latency
+- Already have Kubernetes/ECS infrastructure
+- Want simpler connection management
+- Processing is continuous throughout the day
+
+**Choose Hybrid (Lambda + SQS) if:**
+- Event processing takes >5 minutes
+- Need robust retry mechanisms
+- Want to decouple claiming from processing
+- Processing has variable duration
+
+**Phase 2 Default:** Serverless Lambda (single-stage)
+- Good starting point for most use cases
+- Can migrate to hybrid or containers later if needed
+- Minimizes infrastructure complexity
+
+---
+
+### Critical Implementation Notes
+
+**All deployment options MUST:**
+
+1. **Use `FOR UPDATE SKIP LOCKED`** in transaction
+   ```typescript
+   await prisma.$transaction(async (tx) => {
+     const events = await tx.$queryRaw`... FOR UPDATE SKIP LOCKED`;
+     await tx.event.updateMany({ status: 'PROCESSING' });
+   });
+   ```
+
+2. **Wrap SELECT + UPDATE in single transaction**
+   - Locks must be held until UPDATE completes
+   - Without transaction: race condition possible
+
+3. **Handle empty result gracefully**
+   ```typescript
+   if (events.length === 0) {
+     return []; // No events to process
+   }
+   ```
+
+4. **Set appropriate batch size**
+   - Lambda: 100 events per invocation
+   - Containers: 100-500 events per poll
+   - Balance between throughput and transaction size
+
+5. **Monitor for lock contention**
+   - PostgreSQL metrics: `pg_stat_activity`
+   - CloudWatch custom metrics: events claimed per instance
+   - Alert if instances consistently claim 0 events (may indicate over-provisioning)
+
+**See:** [Design Patterns - Distributed Scheduler Pattern](./design-patterns.md#8-distributed-scheduler-pattern---concurrent-job-claiming) for complete implementation details and concurrency testing.
+
+**See:** [Local Development](./local-development.md#connection-pooling-testing) for testing connection pooling with PgBouncer locally.
+
+---

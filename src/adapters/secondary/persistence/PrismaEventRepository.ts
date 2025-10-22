@@ -123,71 +123,73 @@ export class PrismaEventRepository implements IEventRepository {
    * @see docs/architecture/design-patterns.md - Distributed Scheduler Pattern
    */
   public async claimReadyEvents(limit: number): Promise<Event[]> {
-    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
 
-    // PostgreSQL row-level locking prevents race conditions in distributed scheduler
-    const events = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        user_id: string;
-        event_type: string;
-        status: string;
-        target_timestamp_utc: Date;
-        target_timestamp_local: Date;
-        target_timezone: string;
-        executed_at: Date | null;
-        failure_reason: string | null;
-        retry_count: number;
-        version: number;
-        idempotency_key: string;
-        delivery_payload: Prisma.JsonValue;
-        created_at: Date;
-        updated_at: Date;
-      }>
-    >`
-      SELECT * FROM events
-      WHERE status = 'PENDING'
-        AND target_timestamp_utc <= ${now}
-      ORDER BY target_timestamp_utc ASC
-      LIMIT ${limit}
-      FOR UPDATE SKIP LOCKED
-    `;
+      // PostgreSQL row-level locking prevents race conditions in distributed scheduler
+      const events = await tx.$queryRaw<
+        Array<{
+          id: string;
+          user_id: string;
+          event_type: string;
+          status: string;
+          target_timestamp_utc: Date;
+          target_timestamp_local: Date;
+          target_timezone: string;
+          executed_at: Date | null;
+          failure_reason: string | null;
+          retry_count: number;
+          version: number;
+          idempotency_key: string;
+          delivery_payload: Prisma.JsonValue;
+          created_at: Date;
+          updated_at: Date;
+        }>
+      >`
+        SELECT * FROM events
+        WHERE status = 'PENDING'
+          AND target_timestamp_utc <= ${now}
+        ORDER BY target_timestamp_utc ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `;
 
-    if (events.length === 0) {
-      return [];
-    }
+      if (events.length === 0) {
+        return [];
+      }
 
-    // Transition claimed events to PROCESSING and increment version
-    const eventIds = events.map((e) => e.id);
-    await this.prisma.event.updateMany({
-      where: {
-        id: { in: eventIds },
-      },
-      data: {
-        status: 'PROCESSING',
-        version: { increment: 1 },
-      },
+      // Transition claimed events to PROCESSING and increment version
+      const eventIds = events.map((e) => e.id);
+      await tx.event.updateMany({
+        where: {
+          id: { in: eventIds },
+        },
+        data: {
+          status: 'PROCESSING',
+          version: { increment: 1 },
+        },
+      });
+
+      // Map raw SQL results (snake_case) to domain entities
+      return events.map((e) =>
+        eventToDomain({
+          id: e.id,
+          userId: e.user_id,
+          eventType: e.event_type,
+          status: EventStatus.PROCESSING, // Already transitioned
+          targetTimestampUTC: e.target_timestamp_utc,
+          targetTimestampLocal: e.target_timestamp_local,
+          targetTimezone: e.target_timezone,
+          executedAt: e.executed_at,
+          failureReason: e.failure_reason,
+          retryCount: e.retry_count,
+          version: e.version + 1, // Version was incremented
+          idempotencyKey: e.idempotency_key,
+          deliveryPayload: e.delivery_payload,
+          createdAt: e.created_at,
+          updatedAt: e.updated_at,
+        })
+      );
     });
-
-    // Map raw SQL results (snake_case) to domain entities
-    return events.map((e) =>
-      eventToDomain({
-        id: e.id,
-        userId: e.user_id,
-        eventType: e.event_type,
-        status: EventStatus.PROCESSING, // Already transitioned
-        targetTimestampUTC: e.target_timestamp_utc,
-        targetTimestampLocal: e.target_timestamp_local,
-        targetTimezone: e.target_timezone,
-        executedAt: e.executed_at,
-        failureReason: e.failure_reason,
-        retryCount: e.retry_count,
-        version: e.version + 1, // Version was incremented
-        idempotencyKey: e.idempotency_key,
-        deliveryPayload: e.delivery_payload,
-        createdAt: e.created_at,
-        updatedAt: e.updated_at,
-      })
-    );
   }
 }
