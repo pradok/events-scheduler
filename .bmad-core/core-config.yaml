@@ -18,6 +18,10 @@ devLoadAlwaysFiles:
   - docs/architecture/tech-stack.md
   - docs/architecture/source-tree.md
   - docs/architecture/port-interfaces.md
+  - docs/architecture/design-patterns.md
+  - docs/architecture/error-handling.md
+  - docs/architecture/data-models.md
+  - docs/architecture/test-strategy.md
 devDebugLog: .ai/debug-log.md
 devStoryLocation: docs/stories
 slashPrefix: BMad

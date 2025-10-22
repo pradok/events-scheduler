@@ -25,6 +25,15 @@ export class IdempotencyKey {
   }
 
   /**
+   * Creates an IdempotencyKey from a string value
+   * @param value The idempotency key string
+   * @returns A new IdempotencyKey
+   */
+  public static fromString(value: string): IdempotencyKey {
+    return new IdempotencyKey(value);
+  }
+
+  /**
    * Returns the idempotency key string
    */
   public toString(): string {

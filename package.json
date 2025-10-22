@@ -13,6 +13,7 @@
     "build:watch": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --sourcemap --watch",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -43,10 +44,12 @@
   "lint-staged": {
     "*.ts": [
       "eslint --fix",
-      "prettier --write"
+      "prettier --write",
+      "bash -c 'npm run typecheck'"
     ]
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^10.5.0",
     "@types/jest": "^29.5.11",
     "@types/luxon": "^3.4.2",
     "@typescript-eslint/eslint-plugin": "6.19.1",

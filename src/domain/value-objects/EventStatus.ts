@@ -39,3 +39,16 @@ export function validateTransition(from: EventStatus, to: EventStatus): void {
     throw new InvalidStateTransitionError(from, to);
   }
 }
+
+/**
+ * Creates an EventStatus from a string value
+ * @param value The status string (PENDING, PROCESSING, COMPLETED, FAILED)
+ * @returns The corresponding EventStatus enum value
+ */
+export function fromString(value: string): EventStatus {
+  const statusValue = value as EventStatus;
+  if (!Object.values(EventStatus).includes(statusValue)) {
+    throw new Error(`Invalid event status: ${value}`);
+  }
+  return statusValue;
+}

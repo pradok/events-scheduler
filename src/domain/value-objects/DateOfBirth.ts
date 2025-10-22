@@ -27,6 +27,13 @@ export class DateOfBirth {
   }
 
   /**
+   * Static factory method to create DateOfBirth from string
+   */
+  public static fromString(dateString: string): DateOfBirth {
+    return new DateOfBirth(dateString);
+  }
+
+  /**
    * Returns the month and day of the birthday
    */
   public getMonthDay(): { month: number; day: number } {

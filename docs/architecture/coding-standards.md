@@ -41,37 +41,136 @@ Reference: [Full Architecture Document](../architecture.md#coding-standards)
 - `any` type forbidden (use `unknown` if type truly unknown)
 - Explicit typing required for all function signatures
 
-### 3. Repository Pattern Required
+### 3. Explicit Accessibility Modifiers
+
+- All class members MUST have explicit `public`, `private`, or `protected` modifiers
+- Enforced as ESLint error (`@typescript-eslint/explicit-member-accessibility`)
+- Improves code clarity and encapsulation
+- Example:
+  ```typescript
+  export class UserRepository implements IUserRepository {
+    public constructor(private readonly prisma: PrismaClient) {}
+
+    public async findById(id: string): Promise<User | null> {
+      return this.findUser(id);
+    }
+
+    private async findUser(id: string): Promise<User | null> {
+      // implementation
+    }
+  }
+  ```
+
+### 4. Repository Pattern Required
 
 - All database access must go through repository interfaces
 - Never direct Prisma calls from use cases
 - Ports define contracts, adapters implement them
 
-### 4. Domain Layer Purity
+### 5. Raw SQL Usage in Prisma Repositories
+
+**When to Use Raw SQL (`$queryRaw`):**
+
+Use raw SQL only when Prisma's query builder cannot express the required database operation. Raw SQL is justified for:
+
+1. **Database-specific features not supported by Prisma:**
+   - Row-level locking (`FOR UPDATE`, `SKIP LOCKED`)
+   - Date component extraction functions (`TO_CHAR`, `EXTRACT`)
+   - Advanced window functions
+   - Custom aggregations or analytics queries
+
+2. **Performance-critical operations:**
+   - Complex queries where raw SQL significantly outperforms Prisma's generated queries
+   - Bulk operations requiring specific database optimizations
+
+**Requirements for Raw SQL:**
+
+When using `$queryRaw`, you MUST:
+
+1. **Document the justification** in detailed inline comments:
+
+   ```typescript
+   /**
+    * **Raw SQL Justification:**
+    * Uses `$queryRaw` because Prisma doesn't support:
+    * 1. [Specific feature]
+    * 2. [Why Prisma can't handle it]
+    *
+    * **Why not Prisma query builder?**
+    * - [Explain why Prisma approach fails or is insufficient]
+    *
+    * **Business Logic:**
+    * - [Explain the domain requirement that necessitates this approach]
+    */
+   ```
+
+2. **Maintain type safety** using TypeScript generics:
+
+   ```typescript
+   const users = await this.prisma.$queryRaw<Array<{
+     id: string;
+     first_name: string;
+     // ... explicit type for ALL columns
+   }>>`SELECT * FROM users WHERE ...`;
+   ```
+
+3. **Handle snake_case to camelCase** mapping explicitly:
+
+   ```typescript
+   return users.map(u => userToDomain({
+     id: u.id,
+     firstName: u.first_name,  // Explicit mapping
+     // ...
+   }));
+   ```
+
+4. **Reference this document** in the code:
+
+   ```typescript
+   @see docs/architecture/coding-standards.md - Section 5: Raw SQL Usage
+   ```
+
+**Current Raw SQL Use Cases:**
+
+| Repository | Method | Reason |
+|------------|--------|--------|
+| `PrismaUserRepository` | `findUsersWithUpcomingBirthdays()` | PostgreSQL `TO_CHAR()` for date component extraction; handles year wrap-around logic |
+| `PrismaEventRepository` | `claimReadyEvents()` | PostgreSQL `FOR UPDATE SKIP LOCKED` for distributed scheduler concurrency safety |
+
+**Code References:**
+
+- [PrismaUserRepository.ts:74-111](../../src/adapters/secondary/persistence/PrismaUserRepository.ts)
+- [PrismaEventRepository.ts:125-166](../../src/adapters/secondary/persistence/PrismaEventRepository.ts)
+
+**Default Approach:**
+
+Always attempt to use Prisma's query builder first. Only escalate to raw SQL when you've confirmed Prisma cannot express the required operation. This maintains database abstraction and portability where possible.
+
+### 6. Domain Layer Purity
 
 - `src/domain/` must have zero imports from `src/adapters/` or `src/shared/`
 - Enforced by linting or architecture tests
 - Domain logic is framework-agnostic
 
-### 5. Error Handling
+### 7. Error Handling
 
 - Never swallow errors silently
 - Always log and rethrow or handle explicitly
 - Use custom error classes (DomainError, ApplicationError, InfrastructureError)
 
-### 6. Async/Await Only
+### 8. Async/Await Only
 
 - No callbacks or raw promises
 - Use async/await for all asynchronous operations
 - Proper error handling with try/catch
 
-### 7. Value Objects for Validation
+### 9. Value Objects for Validation
 
 - Use value objects (Timezone, DateOfBirth) instead of primitive types
 - Encapsulate validation logic in value objects
 - Type safety through domain modeling
 
-### 8. Zod Schemas as Single Source of Truth
+### 10. Zod Schemas as Single Source of Truth
 
 - **Schema-First Approach:** Define Zod schemas as the single source of truth for all data structures
 - **Type Derivation:** Use `z.infer<typeof schema>` to derive TypeScript interfaces from schemas

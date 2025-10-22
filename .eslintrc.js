@@ -35,7 +35,7 @@ module.exports = {
 
     // Enforce explicit member accessibility
     '@typescript-eslint/explicit-member-accessibility': [
-      'warn',
+      'error',
       {
         accessibility: 'explicit',
       },
