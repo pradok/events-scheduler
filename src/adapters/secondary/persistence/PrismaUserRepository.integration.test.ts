@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { PrismaClient } from '@prisma/client';
-import { startTestDatabase, stopTestDatabase, cleanDatabase } from '../../../helpers/testDatabase';
-import { PrismaUserRepository } from '../../../../../adapters/secondary/persistence/PrismaUserRepository';
-import { User } from '../../../../../domain/entities/User';
-import { DateOfBirth } from '../../../../../domain/value-objects/DateOfBirth';
-import { Timezone } from '../../../../../domain/value-objects/Timezone';
+import {
+  startTestDatabase,
+  stopTestDatabase,
+  cleanDatabase,
+} from '../../../__tests__/integration/helpers/testDatabase';
+import { PrismaUserRepository } from './PrismaUserRepository';
+import { User } from '../../../domain/entities/User';
+import { DateOfBirth } from '../../../domain/value-objects/DateOfBirth';
+import { Timezone } from '../../../domain/value-objects/Timezone';
 import { DateTime } from 'luxon';
 import { randomUUID } from 'crypto';
 

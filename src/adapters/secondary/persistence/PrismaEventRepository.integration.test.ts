@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { PrismaClient } from '@prisma/client';
-import { startTestDatabase, stopTestDatabase, cleanDatabase } from '../../../helpers/testDatabase';
-import { PrismaEventRepository } from '../../../../../adapters/secondary/persistence/PrismaEventRepository';
-import { Event } from '../../../../../domain/entities/Event';
-import { EventStatus } from '../../../../../domain/value-objects/EventStatus';
-import { IdempotencyKey } from '../../../../../domain/value-objects/IdempotencyKey';
+import {
+  startTestDatabase,
+  stopTestDatabase,
+  cleanDatabase,
+} from '../../../__tests__/integration/helpers/testDatabase';
+import { PrismaEventRepository } from './PrismaEventRepository';
+import { Event } from '../../../domain/entities/Event';
+import { EventStatus } from '../../../domain/value-objects/EventStatus';
+import { IdempotencyKey } from '../../../domain/value-objects/IdempotencyKey';
 import { DateTime } from 'luxon';
 import { randomUUID } from 'crypto';
-import { OptimisticLockError } from '../../../../../domain/errors/OptimisticLockError';
+import { OptimisticLockError } from '../../../domain/errors/OptimisticLockError';
 
 describe('PrismaEventRepository - Integration Tests', () => {
   let prisma: PrismaClient;
