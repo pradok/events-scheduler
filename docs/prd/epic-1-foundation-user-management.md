@@ -1,6 +1,10 @@
 # Epic 1: Foundation & User Management
 
-**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events. This epic proves the core domain model works correctly and validates timezone conversion logic early.
+**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events via domain events. This epic proves the core domain model works correctly, validates timezone conversion logic early, and implements bounded contexts for future scalability.
+
+**Story Count:** 11 stories (Originally 8, added 3 for bounded contexts architecture)
+**New Stories:** 1.8 (Domain Event Bus), 1.9 (UserCreated Event Handler), 1.10 (Refactored CreateUserUseCase)
+**Architecture Decision:** Implemented bounded contexts with domain events to decouple User Context from Event Scheduling Context. See [Bounded Contexts Architecture](../architecture/bounded-contexts.md) and [Scalability Analysis](../architecture/scalability-analysis.md) for rationale.
 
 ---
 
@@ -140,28 +144,80 @@
 
 ---
 
-## Story 1.8: Create User Use Case
+## Story 1.8: Domain Event Bus Infrastructure
 
 **As a** developer,
-**I want** a CreateUser use case that generates a birthday event automatically,
-**so that** user creation triggers event scheduling in one atomic operation.
+**I want** an event bus abstraction for in-process domain event communication,
+**so that** bounded contexts can communicate without direct dependencies.
 
 **Acceptance Criteria:**
 
-1. CreateUserUseCase created in `src/application/use-cases/CreateUserUseCase.ts`
-2. Use case receives IUserRepository, IEventRepository, and TimezoneService via dependency injection
-3. Zod schema defined for CreateUser input (firstName, lastName, dateOfBirth, timezone)
-4. TypeScript types derived from Zod schema using `z.infer<typeof CreateUserSchema>`
-5. Use case validates input DTO using Zod schema and derived types
-6. Use case creates User domain entity
-7. Use case calls TimezoneService to calculate next birthday at 9:00 AM local time
-8. Use case creates Event domain entity with calculated timestamps
-9. Use case saves both user and event in a transaction (both succeed or both fail)
-10. Unit tests verify user and event are created atomically with correct timezone calculations
+1. IDomainEventBus interface created in `src/shared/events/IDomainEventBus.ts`
+2. Interface defines: `publish<T>(event: T): Promise<void>` and `subscribe<T>(eventType: string, handler: (event: T) => Promise<void>): void`
+3. Base DomainEvent interface created with common properties (eventType, context, occurredAt, aggregateId)
+4. InMemoryEventBus implementation created with Map-based handler storage
+5. InMemoryEventBus executes handlers sequentially (preserves ordering)
+6. InMemoryEventBus logs errors but continues processing other handlers (resilient)
+7. Unit tests achieve 100% coverage for InMemoryEventBus
+8. All code passes ESLint with 0 errors and strict TypeScript compilation
+
+**Architecture Context:** This story enables bounded context communication via domain events. User Context will publish `UserCreated` events, and Event Scheduling Context will subscribe to generate birthday events. In Phase 2 (10K-100K users), `InMemoryEventBus` can be swapped for `EventBridgeEventBus` with zero code changes in use cases.
+
+**See:** [Story 1.8 Details](../stories/1.8.domain-event-bus.md) | [Bounded Contexts Architecture](../architecture/bounded-contexts.md)
 
 ---
 
-## Story 1.9: User CRUD Use Cases & REST API
+## Story 1.9: UserCreated Event Handler
+
+**As a** developer,
+**I want** an event handler that listens to UserCreated events and generates birthday events,
+**so that** User and Event contexts are decoupled via domain events.
+
+**Acceptance Criteria:**
+
+1. UserCreatedEvent interface created in `src/modules/user/domain/events/UserCreated.ts`
+2. CreateBirthdayEventOnUserCreatedHandler created in `src/modules/event-scheduling/application/event-handlers/`
+3. Handler depends on: IEventRepository, TimezoneService, EventHandlerRegistry (NO User dependencies)
+4. Handler reconstructs User value objects from UserCreatedEvent payload
+5. Handler calculates next birthday using BirthdayEventHandler.calculateNextOccurrence()
+6. Handler creates Event entity with correct timestamps (9:00 AM local, converted to UTC)
+7. Handler persists Event to database via IEventRepository
+8. Handler is registered with IDomainEventBus at application startup
+9. Unit tests achieve 100% coverage for event handler
+10. Integration test verifies end-to-end flow: UserCreated event → Birthday event created
+
+**Architecture Context:** This story moves Event creation logic OUT of User Context INTO Event Scheduling Context. Event creation happens asynchronously after user creation, enabling eventual consistency and future microservice extraction.
+
+**See:** [Story 1.9 Details](../stories/1.9.user-created-event-handler.md) | [Scalability Analysis](../architecture/scalability-analysis.md)
+
+---
+
+## Story 1.10: Create User Use Case (Refactored with Domain Events)
+
+**As a** developer,
+**I want** CreateUser use case refactored to publish UserCreated domain events,
+**so that** User Context is decoupled from Event Scheduling Context.
+
+**Acceptance Criteria:**
+
+1. CreateUserUseCase refactored in `src/application/use-cases/user/CreateUserUseCase.ts`
+2. Use case receives IUserRepository and IDomainEventBus via DI (NO IEventRepository, NO TimezoneService, NO EventHandlerRegistry)
+3. Zod schema defined for CreateUser input (firstName, lastName, dateOfBirth, timezone) ✅ Already done
+4. TypeScript types derived from Zod schema using `z.infer<typeof CreateUserSchema>` ✅ Already done
+5. Use case validates input DTO using Zod schema ✅ Already done
+6. Use case creates User domain entity ✅ Already done
+7. Use case saves user to database via IUserRepository ✅ Already done
+8. Use case publishes UserCreatedEvent to IDomainEventBus (NEW - replaces direct Event creation)
+9. UserCreatedEvent contains all user data needed by Event Scheduling Context (NEW)
+10. Unit tests verify user created and UserCreated event published (NO direct Event creation)
+
+**Refactoring Note:** This story refactors the DONE Story 1.8 implementation to use domain events. The current implementation creates Events directly (tight coupling); it needs to publish UserCreated events instead. Event creation now happens asynchronously in Story 1.9's event handler.
+
+**See:** [Story 1.10 Details](../stories/1.10.create-user-use-case.md) | [Impact Assessment](../architecture/bounded-contexts-impact-assessment.md)
+
+---
+
+## Story 1.11: User CRUD Use Cases & REST API
 
 **As a** developer,
 **I want** complete user CRUD use cases with Fastify REST API endpoints,

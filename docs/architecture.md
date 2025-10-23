@@ -25,6 +25,30 @@ The architecture will be built from scratch following Hexagonal Architecture + D
 |------|---------|-------------|--------|
 | 2025-10-18 | 1.0 | Initial architecture document | Winston (Architect Agent) |
 | 2025-10-19 | 2.0 | Reorganized into high-level overview with shard references | Claude |
+| 2025-01-23 | 3.0 | Added bounded contexts, scalability analysis, and impact assessment | Winston (Architect Agent) |
+
+### Critical Architecture Documents
+
+**For detailed architectural decisions and future planning, see:**
+
+1. **[Bounded Contexts & Eventual Consistency](./architecture/bounded-contexts.md)** - Why User and Event are separate domains, domain event communication pattern, migration to microservices
+2. **[Scalability Analysis](./architecture/scalability-analysis.md)** - Growth projections (1K → 1M users), cost analysis, bottleneck identification, when to extract microservices
+3. **[Impact Assessment](./architecture/bounded-contexts-impact-assessment.md)** - Epic/Story impact of implementing bounded contexts, refactoring requirements, effort estimates
+
+### Core Design Philosophy: Design for Scale, Build for MVP
+
+**Principle:** Implement architectural patterns that support future scale while building the simplest thing that works for MVP.
+
+**What This Means:**
+- ✅ **Bounded contexts** (logical separation) without microservices (physical separation)
+- ✅ **Domain events** (event-driven architecture) with InMemoryEventBus (in-process implementation)
+- ✅ **Port/Adapter pattern** (interface abstractions) with single implementations (Prisma, InMemory)
+- ✅ **Strategy pattern** (pluggable event handlers) with single handler (Birthday)
+- ✅ **Database designed for concurrency** (`FOR UPDATE SKIP LOCKED`) on single instance
+
+**Result:** MVP is simple to build and operate, but scales without refactoring (swap InMemoryEventBus → EventBridge, extract Event Scheduler as microservice, add sharding - all via configuration/deployment changes, not code changes).
+
+**See [Scalability Analysis: Migration Path](./architecture/scalability-analysis.md#when-to-extract-microservices)** for detailed timeline of when to add complexity.
 
 ---
 
@@ -114,6 +138,8 @@ graph TB
 - **Hexagonal Architecture (Ports & Adapters):** Domain layer is pure TypeScript with zero framework dependencies, enabling testing without infrastructure. Adapters (HTTP, Lambda handlers, Prisma repositories) can be swapped without touching business logic. Critical for deployment portability - same codebase runs as Lambda, container, or Node process.
 
 - **Domain-Driven Design (DDD):** Complex business rules (timezone conversions, event state transitions, exactly-once guarantees) belong in domain layer. Entities like `User` and `Event` encapsulate business invariants. Value objects like `Timezone`, `EventStatus`, `DateOfBirth` provide type safety and validation. Domain services like `TimezoneService` and `EventScheduler` contain pure business logic testable without infrastructure.
+
+- **Bounded Contexts with Eventual Consistency:** The system is organized as a modular monolith with two distinct bounded contexts - User Context (identity/profile management) and Event Scheduling Context (time-based scheduling/execution). Contexts communicate via domain events (`UserCreated`, `UserUpdated`, `UserDeleted`) using an event bus abstraction. User and Event are NOT transactionally coupled - Event creation happens asynchronously after User creation, enabling eventual consistency. This design supports future microservice extraction with zero use case changes (swap `InMemoryEventBus` → `EventBridgeEventBus`). **Critical Insight:** Event Scheduling Context drives 90%+ of infrastructure costs and will require horizontal scaling 100× earlier than User Context (see [Scalability Analysis](./architecture/scalability-analysis.md) for detailed growth projections). See [Bounded Contexts & Eventual Consistency](./architecture/bounded-contexts.md) for detailed rationale and migration path.
 
 - **Repository Pattern:** `IUserRepository` and `IEventRepository` ports define contracts independent of database technology. Prisma adapter implements repositories, but could be swapped for TypeORM or raw SQL without changing use cases. Enables in-memory repositories for testing without database.
 
