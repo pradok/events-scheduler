@@ -1,46 +1,37 @@
+import { DateTime } from 'luxon';
 import type { IUserRepository } from '../ports/IUserRepository';
-import type { IEventRepository } from '../../../event-scheduling/application/ports/IEventRepository';
-import type { TimezoneService } from '../../../event-scheduling/domain/services/TimezoneService';
-import type { EventHandlerRegistry } from '../../../event-scheduling/domain/services/event-handlers/EventHandlerRegistry';
+import type { IDomainEventBus } from '../../../../shared/events/IDomainEventBus';
 import type { User } from '../../domain/entities/User';
 import { UserNotFoundError } from '../../../../domain/errors/UserNotFoundError';
 import { DateOfBirth } from '../../domain/value-objects/DateOfBirth';
 import { Timezone } from '../../../../shared/value-objects/Timezone';
-import { EventStatus } from '../../../event-scheduling/domain/value-objects/EventStatus';
 import type { UpdateUserDTO } from '../../../../shared/validation/schemas';
+import type { UserBirthdayChangedEvent } from '../../domain/events/UserBirthdayChanged';
+import type { UserTimezoneChangedEvent } from '../../domain/events/UserTimezoneChanged';
 
 /**
- * UpdateUserUseCase - Update user properties and reschedule events when necessary
+ * UpdateUserUseCase - Update user properties and publish domain events
  *
- * This use case handles partial updates to user data and implements complex
- * event rescheduling logic when birthday or timezone changes.
+ * This use case handles partial updates to user data using event-driven architecture.
+ * When birthday or timezone changes, it publishes domain events that are handled
+ * by the Event Scheduling Context to reschedule events.
  *
- * **Event Rescheduling Logic:**
+ * **Event Publishing:**
  *
- * 1. **Birthday Change:** If dateOfBirth is updated, all PENDING birthday events
- *    are rescheduled to the new birthday date at 9:00 AM in user's timezone.
+ * 1. **Birthday Change:** Publishes UserBirthdayChanged event
+ * 2. **Timezone Change:** Publishes UserTimezoneChanged event
+ * 3. **Combined Changes:** Publishes both events
  *
- * 2. **Timezone Change:** If timezone is updated, all PENDING events are
- *    rescheduled to maintain the same local time (9:00 AM) in the new timezone.
- *
- * 3. **Combined Changes:** If both birthday AND timezone are updated, birthday
- *    logic is applied first, then timezone logic.
- *
- * **Critical Rule:** Only PENDING events are rescheduled. Events with status
- * PROCESSING, COMPLETED, or FAILED are never modified (they are historical records).
- *
- * **Cross-Context Dependency:**
- * This use case depends on IEventRepository, TimezoneService, and EventHandlerRegistry
- * from the Event Scheduling bounded context. This is acceptable for synchronous
- * business logic that must maintain consistency between users and their events.
+ * **Bounded Context Compliance:**
+ * This use case has ZERO dependencies on Event Scheduling Context. Cross-context
+ * communication happens exclusively via domain events, maintaining proper bounded
+ * context separation per bounded-contexts.md.
  *
  * **Usage:**
  * ```typescript
  * const updateUserUseCase = new UpdateUserUseCase(
  *   userRepository,
- *   eventRepository,
- *   timezoneService,
- *   eventHandlerRegistry
+ *   eventBus
  * );
  * const updatedUser = await updateUserUseCase.execute(userId, {
  *   firstName: 'Jane',
@@ -57,19 +48,15 @@ import type { UpdateUserDTO } from '../../../../shared/validation/schemas';
 export class UpdateUserUseCase {
   /**
    * @param userRepository - Repository port for user persistence operations
-   * @param eventRepository - Repository port for event persistence operations
-   * @param timezoneService - Service for timezone conversions
-   * @param eventHandlerRegistry - Registry for event type handlers (birthday, etc.)
+   * @param eventBus - Domain event bus for publishing domain events
    */
   public constructor(
     private readonly userRepository: IUserRepository,
-    private readonly eventRepository: IEventRepository,
-    private readonly timezoneService: TimezoneService,
-    private readonly eventHandlerRegistry: EventHandlerRegistry
+    private readonly eventBus: IDomainEventBus
   ) {}
 
   /**
-   * Execute the use case to update user and reschedule events if needed
+   * Execute the use case to update user and publish domain events if needed
    *
    * @param userId - UUID of the user to update
    * @param dto - Partial update data (only provided fields are updated)
@@ -85,7 +72,7 @@ export class UpdateUserUseCase {
       throw new UserNotFoundError(userId);
     }
 
-    // Track original values for comparison
+    // Track original values for event publishing
     const oldDateOfBirth = user.dateOfBirth;
     const oldTimezone = user.timezone;
 
@@ -110,77 +97,79 @@ export class UpdateUserUseCase {
     // 3. Save updated user
     const updatedUser = await this.userRepository.update(user);
 
-    // 4. Reschedule events if birthday or timezone changed
+    // 4. Publish domain events if birthday or timezone changed
     const birthdayChanged =
       dto.dateOfBirth !== undefined && !updatedUser.dateOfBirth.equals(oldDateOfBirth);
     const timezoneChanged = dto.timezone !== undefined && !updatedUser.timezone.equals(oldTimezone);
 
-    if (birthdayChanged || timezoneChanged) {
-      await this.rescheduleEvents(updatedUser, birthdayChanged, timezoneChanged);
+    if (birthdayChanged) {
+      await this.publishUserBirthdayChangedEvent(
+        updatedUser,
+        oldDateOfBirth.toString(),
+        updatedUser.dateOfBirth.toString()
+      );
+    }
+
+    if (timezoneChanged) {
+      await this.publishUserTimezoneChangedEvent(
+        updatedUser,
+        oldTimezone.toString(),
+        updatedUser.timezone.toString()
+      );
     }
 
     return updatedUser;
   }
 
   /**
-   * Reschedule PENDING events when birthday or timezone changes
+   * Publish UserBirthdayChanged domain event
    *
-   * @param user - Updated user entity with new birthday/timezone
-   * @param birthdayChanged - Whether birthday was updated
-   * @param timezoneChanged - Whether timezone was updated
+   * @param user - Updated user entity
+   * @param oldDateOfBirth - Previous date of birth (YYYY-MM-DD)
+   * @param newDateOfBirth - New date of birth (YYYY-MM-DD)
    */
-  private async rescheduleEvents(
+  private async publishUserBirthdayChangedEvent(
     user: User,
-    birthdayChanged: boolean,
-    timezoneChanged: boolean
+    oldDateOfBirth: string,
+    newDateOfBirth: string
   ): Promise<void> {
-    // Fetch all events for user
-    const allEvents = await this.eventRepository.findByUserId(user.id);
+    const event: UserBirthdayChangedEvent = {
+      eventType: 'UserBirthdayChanged',
+      context: 'user',
+      occurredAt: DateTime.utc().toISO(),
+      aggregateId: user.id,
+      userId: user.id,
+      oldDateOfBirth,
+      newDateOfBirth,
+      timezone: user.timezone.toString(),
+    };
 
-    // Filter to PENDING events only (never modify PROCESSING, COMPLETED, FAILED)
-    const pendingEvents = allEvents.filter((event) => event.status === EventStatus.PENDING);
+    await this.eventBus.publish(event);
+  }
 
-    if (pendingEvents.length === 0) {
-      return; // No events to reschedule
-    }
+  /**
+   * Publish UserTimezoneChanged domain event
+   *
+   * @param user - Updated user entity
+   * @param oldTimezone - Previous timezone (IANA format)
+   * @param newTimezone - New timezone (IANA format)
+   */
+  private async publishUserTimezoneChangedEvent(
+    user: User,
+    oldTimezone: string,
+    newTimezone: string
+  ): Promise<void> {
+    const event: UserTimezoneChangedEvent = {
+      eventType: 'UserTimezoneChanged',
+      context: 'user',
+      occurredAt: DateTime.utc().toISO(),
+      aggregateId: user.id,
+      userId: user.id,
+      oldTimezone,
+      newTimezone,
+      dateOfBirth: user.dateOfBirth.toString(),
+    };
 
-    // Apply rescheduling logic
-    for (const event of pendingEvents) {
-      let needsUpdate = false;
-      let newTargetTimestampLocal = event.targetTimestampLocal;
-      let newTargetTimezone = event.targetTimezone;
-
-      // Birthday change: recalculate next occurrence
-      if (birthdayChanged && event.eventType === 'BIRTHDAY') {
-        const handler = this.eventHandlerRegistry.getHandler('BIRTHDAY');
-        newTargetTimestampLocal = handler.calculateNextOccurrence(user);
-        newTargetTimezone = user.timezone.toString();
-        needsUpdate = true;
-      }
-
-      // Timezone change: keep local time, recalculate UTC
-      if (timezoneChanged) {
-        newTargetTimezone = user.timezone.toString();
-        needsUpdate = true;
-      }
-
-      if (needsUpdate) {
-        // Convert local time to UTC using new timezone
-        const newTargetTimestampUTC = this.timezoneService.convertToUTC(
-          newTargetTimestampLocal,
-          user.timezone
-        );
-
-        // Reschedule event using immutable method
-        const rescheduledEvent = event.reschedule(
-          newTargetTimestampUTC,
-          newTargetTimestampLocal,
-          newTargetTimezone
-        );
-
-        // Persist updated event
-        await this.eventRepository.update(rescheduledEvent);
-      }
-    }
+    await this.eventBus.publish(event);
   }
 }

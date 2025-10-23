@@ -1,25 +1,18 @@
 import { UpdateUserUseCase } from './UpdateUserUseCase';
 import type { IUserRepository } from '../ports/IUserRepository';
-import type { IEventRepository } from '../../../event-scheduling/application/ports/IEventRepository';
-import type { TimezoneService } from '../../../event-scheduling/domain/services/TimezoneService';
-import type { EventHandlerRegistry } from '../../../event-scheduling/domain/services/event-handlers/EventHandlerRegistry';
-import type { IEventHandler } from '../../../event-scheduling/domain/services/event-handlers/IEventHandler';
+import type { IDomainEventBus } from '../../../../shared/events/IDomainEventBus';
 import { User } from '../../domain/entities/User';
-import { Event } from '../../../event-scheduling/domain/entities/Event';
 import { DateOfBirth } from '../../domain/value-objects/DateOfBirth';
 import { Timezone } from '../../../../shared/value-objects/Timezone';
-import { EventStatus } from '../../../event-scheduling/domain/value-objects/EventStatus';
-import { IdempotencyKey } from '../../../event-scheduling/domain/value-objects/IdempotencyKey';
 import { DateTime } from 'luxon';
 import type { UpdateUserDTO } from '../../../../shared/validation/schemas';
+import type { UserBirthdayChangedEvent } from '../../domain/events/UserBirthdayChanged';
+import type { UserTimezoneChangedEvent } from '../../domain/events/UserTimezoneChanged';
 
 describe('UpdateUserUseCase', () => {
   let useCase: UpdateUserUseCase;
   let mockUserRepository: jest.Mocked<IUserRepository>;
-  let mockEventRepository: jest.Mocked<IEventRepository>;
-  let mockTimezoneService: jest.Mocked<TimezoneService>;
-  let mockEventHandlerRegistry: jest.Mocked<EventHandlerRegistry>;
-  let mockBirthdayHandler: jest.Mocked<IEventHandler>;
+  let mockEventBus: jest.Mocked<IDomainEventBus>;
 
   beforeEach(() => {
     mockUserRepository = {
@@ -31,48 +24,16 @@ describe('UpdateUserUseCase', () => {
       findUsersWithUpcomingBirthdays: jest.fn(),
     } as jest.Mocked<IUserRepository>;
 
-    mockEventRepository = {
-      findById: jest.fn(),
-      findByUserId: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      deleteByUserId: jest.fn(),
-      claimReadyEvents: jest.fn(),
-    } as jest.Mocked<IEventRepository>;
+    mockEventBus = {
+      publish: jest.fn(),
+      subscribe: jest.fn(),
+    } as jest.Mocked<IDomainEventBus>;
 
-    mockTimezoneService = {
-      convertToUTC: jest.fn(),
-      convertFromUTC: jest.fn(),
-      getTimezoneOffset: jest.fn(),
-    } as unknown as jest.Mocked<TimezoneService>;
-
-    mockBirthdayHandler = {
-      eventType: 'BIRTHDAY',
-      generateEvent: jest.fn(),
-      formatMessage: jest.fn(),
-      selectDeliveryChannel: jest.fn(),
-      calculateNextOccurrence: jest.fn(),
-    } as jest.Mocked<IEventHandler>;
-
-    mockEventHandlerRegistry = {
-      register: jest.fn(),
-      getHandler: jest.fn().mockReturnValue(mockBirthdayHandler),
-      getSupportedEventTypes: jest.fn(),
-      isSupported: jest.fn(),
-      clear: jest.fn(),
-    } as unknown as jest.Mocked<EventHandlerRegistry>;
-
-    useCase = new UpdateUserUseCase(
-      mockUserRepository,
-      mockEventRepository,
-      mockTimezoneService,
-      mockEventHandlerRegistry
-    );
+    useCase = new UpdateUserUseCase(mockUserRepository, mockEventBus);
   });
 
   describe('execute - name updates only', () => {
-    it('should update firstName and lastName without rescheduling events', async () => {
+    it('should update firstName and lastName without publishing events', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
       const user = new User({
@@ -101,14 +62,42 @@ describe('UpdateUserUseCase', () => {
       // Assert
       expect(result.firstName).toBe('Jane');
       expect(result.lastName).toBe('Smith');
-      expect(mockUserRepository.update).toHaveBeenCalledTimes(1);
-      expect(mockEventRepository.findByUserId).not.toHaveBeenCalled();
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
+      expect(mockUserRepository.update).toHaveBeenCalledTimes(1); // eslint-disable-line @typescript-eslint/unbound-method
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
+    });
+
+    it('should update only firstName', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-01-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        firstName: 'Jane',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(new User({ ...user, firstName: 'Jane' }));
+
+      // Act
+      const result = await useCase.execute(userId, dto);
+
+      // Assert
+      expect(result.firstName).toBe('Jane');
+      expect(result.lastName).toBe('Doe'); // lastName unchanged
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
     });
   });
 
-  describe('execute - birthday rescheduling', () => {
-    it('should reschedule PENDING birthday events when dateOfBirth updated', async () => {
+  describe('execute - birthday change events', () => {
+    it('should publish UserBirthdayChanged event when dateOfBirth updated', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
       const oldDate = new DateOfBirth('1990-01-15');
@@ -124,52 +113,31 @@ describe('UpdateUserUseCase', () => {
         updatedAt: DateTime.now(),
       });
 
-      const pendingEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.PENDING,
-        targetTimestampUTC: DateTime.fromISO('2026-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2026-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 1,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: null,
-        failureReason: null,
-      });
-
       const dto: UpdateUserDTO = {
         dateOfBirth: '1990-02-14',
       };
 
-      const nextBirthdayLocal = DateTime.fromISO('2026-02-14T09:00:00');
-      const nextBirthdayUTC = DateTime.fromISO('2026-02-14T14:00:00Z');
-
       mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
-      mockBirthdayHandler.calculateNextOccurrence.mockReturnValue(nextBirthdayLocal);
-      mockTimezoneService.convertToUTC.mockReturnValue(nextBirthdayUTC);
-      mockEventRepository.update.mockResolvedValue(pendingEvent);
       mockUserRepository.update.mockResolvedValue(new User({ ...user, dateOfBirth: newDate }));
 
       // Act
       await useCase.execute(userId, dto);
 
       // Assert
-      expect(mockEventRepository.findByUserId).toHaveBeenCalledTimes(1);
-      expect(mockBirthdayHandler.calculateNextOccurrence).toHaveBeenCalled();
-      expect(mockTimezoneService.convertToUTC).toHaveBeenCalledWith(
-        nextBirthdayLocal,
-        expect.any(Timezone)
-      );
-      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(1); // eslint-disable-line @typescript-eslint/unbound-method
+
+      const publishedEvent = mockEventBus.publish.mock.calls[0]?.[0] as UserBirthdayChangedEvent;
+      expect(publishedEvent.eventType).toBe('UserBirthdayChanged');
+      expect(publishedEvent.context).toBe('user');
+      expect(publishedEvent.userId).toBe(userId);
+      expect(publishedEvent.aggregateId).toBe(userId);
+      expect(publishedEvent.oldDateOfBirth).toBe('1990-01-15');
+      expect(publishedEvent.newDateOfBirth).toBe('1990-02-14');
+      expect(publishedEvent.timezone).toBe('America/New_York');
+      expect(publishedEvent.occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
     });
 
-    it('should NOT modify COMPLETED events when birthday updated', async () => {
+    it('should NOT publish UserBirthdayChanged event when dateOfBirth unchanged', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
       const user = new User({
@@ -182,140 +150,23 @@ describe('UpdateUserUseCase', () => {
         updatedAt: DateTime.now(),
       });
 
-      const completedEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.COMPLETED,
-        targetTimestampUTC: DateTime.fromISO('2025-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2025-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 2,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: DateTime.now(),
-        failureReason: null,
-      });
-
       const dto: UpdateUserDTO = {
-        dateOfBirth: '1990-02-14',
+        firstName: 'Jane',
       };
 
       mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([completedEvent]);
-      mockUserRepository.update.mockResolvedValue(
-        new User({ ...user, dateOfBirth: new DateOfBirth('1990-02-14') })
-      );
+      mockUserRepository.update.mockResolvedValue(new User({ ...user, firstName: 'Jane' }));
 
       // Act
       await useCase.execute(userId, dto);
 
       // Assert
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
-    });
-
-    it('should NOT modify PROCESSING events when birthday updated', async () => {
-      // Arrange
-      const userId = '550e8400-e29b-41d4-a716-446655440000';
-      const user = new User({
-        id: userId,
-        firstName: 'John',
-        lastName: 'Doe',
-        dateOfBirth: new DateOfBirth('1990-01-15'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      const processingEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.PROCESSING,
-        targetTimestampUTC: DateTime.fromISO('2025-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2025-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 2,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: null,
-        failureReason: null,
-      });
-
-      const dto: UpdateUserDTO = {
-        dateOfBirth: '1990-02-14',
-      };
-
-      mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([processingEvent]);
-      mockUserRepository.update.mockResolvedValue(
-        new User({ ...user, dateOfBirth: new DateOfBirth('1990-02-14') })
-      );
-
-      // Act
-      await useCase.execute(userId, dto);
-
-      // Assert
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
-    });
-
-    it('should NOT modify FAILED events when birthday updated', async () => {
-      // Arrange
-      const userId = '550e8400-e29b-41d4-a716-446655440000';
-      const user = new User({
-        id: userId,
-        firstName: 'John',
-        lastName: 'Doe',
-        dateOfBirth: new DateOfBirth('1990-01-15'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      const failedEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.FAILED,
-        targetTimestampUTC: DateTime.fromISO('2025-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2025-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 2,
-        retryCount: 3,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: null,
-        failureReason: 'Delivery failed',
-      });
-
-      const dto: UpdateUserDTO = {
-        dateOfBirth: '1990-02-14',
-      };
-
-      mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([failedEvent]);
-      mockUserRepository.update.mockResolvedValue(
-        new User({ ...user, dateOfBirth: new DateOfBirth('1990-02-14') })
-      );
-
-      // Act
-      await useCase.execute(userId, dto);
-
-      // Assert
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
     });
   });
 
-  describe('execute - timezone rescheduling', () => {
-    it('should reschedule PENDING events when timezone updated', async () => {
+  describe('execute - timezone change events', () => {
+    it('should publish UserTimezoneChanged event when timezone updated', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
       const oldTimezone = new Timezone('America/New_York');
@@ -331,49 +182,31 @@ describe('UpdateUserUseCase', () => {
         updatedAt: DateTime.now(),
       });
 
-      const pendingEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.PENDING,
-        targetTimestampUTC: DateTime.fromISO('2026-01-15T14:00:00Z'), // 9AM ET = 2PM UTC
-        targetTimestampLocal: DateTime.fromISO('2026-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 1,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: null,
-        failureReason: null,
-      });
-
       const dto: UpdateUserDTO = {
         timezone: 'America/Los_Angeles',
       };
 
-      const newUTC = DateTime.fromISO('2026-01-15T17:00:00Z'); // 9AM PT = 5PM UTC
-
       mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
-      mockTimezoneService.convertToUTC.mockReturnValue(newUTC);
-      mockEventRepository.update.mockResolvedValue(pendingEvent);
       mockUserRepository.update.mockResolvedValue(new User({ ...user, timezone: newTimezone }));
 
       // Act
       await useCase.execute(userId, dto);
 
       // Assert
-      expect(mockEventRepository.findByUserId).toHaveBeenCalledTimes(1);
-      expect(mockTimezoneService.convertToUTC).toHaveBeenCalledWith(
-        pendingEvent.targetTimestampLocal,
-        newTimezone
-      );
-      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(1); // eslint-disable-line @typescript-eslint/unbound-method
+
+      const publishedEvent = mockEventBus.publish.mock.calls[0]?.[0] as UserTimezoneChangedEvent;
+      expect(publishedEvent.eventType).toBe('UserTimezoneChanged');
+      expect(publishedEvent.context).toBe('user');
+      expect(publishedEvent.userId).toBe(userId);
+      expect(publishedEvent.aggregateId).toBe(userId);
+      expect(publishedEvent.oldTimezone).toBe('America/New_York');
+      expect(publishedEvent.newTimezone).toBe('America/Los_Angeles');
+      expect(publishedEvent.dateOfBirth).toBe('1990-01-15');
+      expect(publishedEvent.occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
     });
 
-    it('should NOT modify COMPLETED events when timezone updated', async () => {
+    it('should NOT publish UserTimezoneChanged event when timezone unchanged', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
       const user = new User({
@@ -386,72 +219,38 @@ describe('UpdateUserUseCase', () => {
         updatedAt: DateTime.now(),
       });
 
-      const completedEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.COMPLETED,
-        targetTimestampUTC: DateTime.fromISO('2025-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2025-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 2,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: DateTime.now(),
-        failureReason: null,
-      });
-
       const dto: UpdateUserDTO = {
-        timezone: 'America/Los_Angeles',
+        firstName: 'Jane',
       };
 
       mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([completedEvent]);
-      mockUserRepository.update.mockResolvedValue(
-        new User({ ...user, timezone: new Timezone('America/Los_Angeles') })
-      );
+      mockUserRepository.update.mockResolvedValue(new User({ ...user, firstName: 'Jane' }));
 
       // Act
       await useCase.execute(userId, dto);
 
       // Assert
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
     });
   });
 
-  describe('execute - combined updates', () => {
-    it('should reschedule events for both birthday and timezone change', async () => {
+  describe('execute - combined birthday and timezone changes', () => {
+    it('should publish both UserBirthdayChanged and UserTimezoneChanged events', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const oldDate = new DateOfBirth('1990-01-15');
+      const newDate = new DateOfBirth('1990-02-14');
+      const oldTimezone = new Timezone('America/New_York');
+      const newTimezone = new Timezone('America/Los_Angeles');
+
       const user = new User({
         id: userId,
         firstName: 'John',
         lastName: 'Doe',
-        dateOfBirth: new DateOfBirth('1990-01-15'),
-        timezone: new Timezone('America/New_York'),
+        dateOfBirth: oldDate,
+        timezone: oldTimezone,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-      });
-
-      const pendingEvent = new Event({
-        id: 'event-123',
-        userId,
-        eventType: 'BIRTHDAY',
-        status: EventStatus.PENDING,
-        targetTimestampUTC: DateTime.fromISO('2026-01-15T14:00:00Z'),
-        targetTimestampLocal: DateTime.fromISO('2026-01-15T09:00:00'),
-        targetTimezone: 'America/New_York',
-        idempotencyKey: IdempotencyKey.fromString('key-123'),
-        deliveryPayload: { message: 'Happy Birthday' },
-        version: 1,
-        retryCount: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        executedAt: null,
-        failureReason: null,
       });
 
       const dto: UpdateUserDTO = {
@@ -459,29 +258,71 @@ describe('UpdateUserUseCase', () => {
         timezone: 'America/Los_Angeles',
       };
 
-      const nextBirthdayLocal = DateTime.fromISO('2026-02-14T09:00:00');
-      const nextBirthdayUTC = DateTime.fromISO('2026-02-14T17:00:00Z');
-
       mockUserRepository.findById.mockResolvedValue(user);
-      mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
-      mockBirthdayHandler.calculateNextOccurrence.mockReturnValue(nextBirthdayLocal);
-      mockTimezoneService.convertToUTC.mockReturnValue(nextBirthdayUTC);
-      mockEventRepository.update.mockResolvedValue(pendingEvent);
       mockUserRepository.update.mockResolvedValue(
-        new User({
-          ...user,
-          dateOfBirth: new DateOfBirth('1990-02-14'),
-          timezone: new Timezone('America/Los_Angeles'),
-        })
+        new User({ ...user, dateOfBirth: newDate, timezone: newTimezone })
       );
 
       // Act
       await useCase.execute(userId, dto);
 
       // Assert
-      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
-      expect(mockBirthdayHandler.calculateNextOccurrence).toHaveBeenCalled();
-      expect(mockTimezoneService.convertToUTC).toHaveBeenCalled();
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(2); // eslint-disable-line @typescript-eslint/unbound-method
+
+      const birthdayEvent = mockEventBus.publish.mock.calls[0]?.[0] as UserBirthdayChangedEvent;
+      expect(birthdayEvent.eventType).toBe('UserBirthdayChanged');
+      expect(birthdayEvent.oldDateOfBirth).toBe('1990-01-15');
+      expect(birthdayEvent.newDateOfBirth).toBe('1990-02-14');
+
+      const timezoneEvent = mockEventBus.publish.mock.calls[1]?.[0] as UserTimezoneChangedEvent;
+      expect(timezoneEvent.eventType).toBe('UserTimezoneChanged');
+      expect(timezoneEvent.oldTimezone).toBe('America/New_York');
+      expect(timezoneEvent.newTimezone).toBe('America/Los_Angeles');
+    });
+
+    it('should publish both events when all fields updated', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const oldDate = new DateOfBirth('1990-01-15');
+      const newDate = new DateOfBirth('1990-02-14');
+      const oldTimezone = new Timezone('America/New_York');
+      const newTimezone = new Timezone('Europe/London');
+
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: oldDate,
+        timezone: oldTimezone,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        dateOfBirth: '1990-02-14',
+        timezone: 'Europe/London',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(
+        new User({
+          ...user,
+          firstName: 'Jane',
+          lastName: 'Smith',
+          dateOfBirth: newDate,
+          timezone: newTimezone,
+        })
+      );
+
+      // Act
+      const result = await useCase.execute(userId, dto);
+
+      // Assert
+      expect(result.firstName).toBe('Jane');
+      expect(result.lastName).toBe('Smith');
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(2); // eslint-disable-line @typescript-eslint/unbound-method
     });
   });
 
@@ -489,13 +330,164 @@ describe('UpdateUserUseCase', () => {
     it('should throw UserNotFoundError when user does not exist', async () => {
       // Arrange
       const userId = '550e8400-e29b-41d4-a716-446655440000';
-      const dto: UpdateUserDTO = { firstName: 'Jane' };
+      const dto: UpdateUserDTO = {
+        firstName: 'Jane',
+      };
 
       mockUserRepository.findById.mockResolvedValue(null);
 
       // Act & Assert
       await expect(useCase.execute(userId, dto)).rejects.toThrow('User not found');
-      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should propagate repository errors', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-01-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        firstName: 'Jane',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockRejectedValue(new Error('Database error'));
+
+      // Act & Assert
+      await expect(useCase.execute(userId, dto)).rejects.toThrow('Database error');
+    });
+
+    it('should propagate event bus errors', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const oldDate = new DateOfBirth('1990-01-15');
+      const newDate = new DateOfBirth('1990-02-14');
+
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: oldDate,
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        dateOfBirth: '1990-02-14',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(new User({ ...user, dateOfBirth: newDate }));
+      mockEventBus.publish.mockRejectedValue(new Error('Event bus error'));
+
+      // Act & Assert
+      await expect(useCase.execute(userId, dto)).rejects.toThrow('Event bus error');
+    });
+  });
+
+  describe('execute - edge cases', () => {
+    it('should handle partial updates correctly', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-01-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        lastName: 'Smith',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(new User({ ...user, lastName: 'Smith' }));
+
+      // Act
+      const result = await useCase.execute(userId, dto);
+
+      // Assert
+      expect(result.firstName).toBe('John'); // Unchanged
+      expect(result.lastName).toBe('Smith');
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
+    });
+
+    it('should handle empty DTO by returning unchanged user', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-01-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {};
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(user);
+
+      // Act
+      const result = await useCase.execute(userId, dto);
+
+      // Assert
+      expect(result).toBe(user);
+      expect(mockEventBus.publish).not.toHaveBeenCalled(); // eslint-disable-line @typescript-eslint/unbound-method
+    });
+
+    it('should use new timezone in birthday event when both change', async () => {
+      // Arrange
+      const userId = '550e8400-e29b-41d4-a716-446655440000';
+      const oldDate = new DateOfBirth('1990-01-15');
+      const newDate = new DateOfBirth('1990-02-14');
+      const oldTimezone = new Timezone('America/New_York');
+      const newTimezone = new Timezone('Europe/London');
+
+      const user = new User({
+        id: userId,
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: oldDate,
+        timezone: oldTimezone,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const dto: UpdateUserDTO = {
+        dateOfBirth: '1990-02-14',
+        timezone: 'Europe/London',
+      };
+
+      mockUserRepository.findById.mockResolvedValue(user);
+      mockUserRepository.update.mockResolvedValue(
+        new User({ ...user, dateOfBirth: newDate, timezone: newTimezone })
+      );
+
+      // Act
+      await useCase.execute(userId, dto);
+
+      // Assert
+      const birthdayEvent = mockEventBus.publish.mock.calls[0]?.[0] as UserBirthdayChangedEvent;
+      // Birthday event should use NEW timezone
+      expect(birthdayEvent.timezone).toBe('Europe/London');
+
+      const timezoneEvent = mockEventBus.publish.mock.calls[1]?.[0] as UserTimezoneChangedEvent;
+      // Timezone event should include dateOfBirth
+      expect(timezoneEvent.dateOfBirth).toBe('1990-02-14');
     });
   });
 });

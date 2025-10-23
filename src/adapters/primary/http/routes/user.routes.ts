@@ -4,10 +4,7 @@ import { GetUserUseCase } from '../../../../modules/user/application/use-cases/G
 import { UpdateUserUseCase } from '../../../../modules/user/application/use-cases/UpdateUserUseCase';
 import { DeleteUserUseCase } from '../../../../modules/user/application/use-cases/DeleteUserUseCase';
 import { PrismaUserRepository } from '../../../../modules/user/adapters/persistence/PrismaUserRepository';
-import { PrismaEventRepository } from '../../../../modules/event-scheduling/adapters/persistence/PrismaEventRepository';
-import { TimezoneService } from '../../../../modules/event-scheduling/domain/services/TimezoneService';
-import { EventHandlerRegistry } from '../../../../modules/event-scheduling/domain/services/event-handlers/EventHandlerRegistry';
-import { BirthdayEventHandler } from '../../../../modules/event-scheduling/domain/services/event-handlers/BirthdayEventHandler';
+import { createEventBus } from '../../../../shared/events/EventBusFactory';
 import {
   GetUserParamsSchema,
   UpdateUserSchema,
@@ -128,17 +125,9 @@ export function registerUserRoutes(server: FastifyInstance, prisma: PrismaClient
 
     // Instantiate dependencies
     const userRepository = new PrismaUserRepository(prisma);
-    const eventRepository = new PrismaEventRepository(prisma);
-    const timezoneService = new TimezoneService();
-    const eventHandlerRegistry = new EventHandlerRegistry();
-    eventHandlerRegistry.register(new BirthdayEventHandler(timezoneService));
+    const eventBus = createEventBus(prisma);
 
-    const updateUserUseCase = new UpdateUserUseCase(
-      userRepository,
-      eventRepository,
-      timezoneService,
-      eventHandlerRegistry
-    );
+    const updateUserUseCase = new UpdateUserUseCase(userRepository, eventBus);
 
     // Execute use case
     const updatedUser = await updateUserUseCase.execute(params.id, body);
@@ -171,9 +160,9 @@ export function registerUserRoutes(server: FastifyInstance, prisma: PrismaClient
 
     // Instantiate dependencies
     const userRepository = new PrismaUserRepository(prisma);
-    const eventRepository = new PrismaEventRepository(prisma);
+    const eventBus = createEventBus(prisma);
 
-    const deleteUserUseCase = new DeleteUserUseCase(userRepository, eventRepository);
+    const deleteUserUseCase = new DeleteUserUseCase(userRepository, eventBus);
 
     // Execute use case
     await deleteUserUseCase.execute(params.id);

@@ -1,26 +1,30 @@
+import { DateTime } from 'luxon';
 import type { IUserRepository } from '../ports/IUserRepository';
-import type { IEventRepository } from '../../../event-scheduling/application/ports/IEventRepository';
+import type { IDomainEventBus } from '../../../../shared/events/IDomainEventBus';
 import { UserNotFoundError } from '../../../../domain/errors/UserNotFoundError';
+import type { UserDeletedEvent } from '../../domain/events/UserDeleted';
 
 /**
- * DeleteUserUseCase - Delete a user and cascade delete all associated events
+ * DeleteUserUseCase - Delete a user and publish domain event for cascade delete
  *
- * This use case implements the cascade delete pattern to ensure data consistency.
- * When a user is deleted, all their pending, completed, and failed events are also removed.
+ * This use case implements event-driven cascade delete pattern. When a user is deleted,
+ * it publishes a UserDeleted domain event that is handled by the Event Scheduling Context
+ * to delete all associated events.
  *
- * **Transaction Behavior:**
- * This use case should be wrapped in a database transaction by the repository implementation
- * to ensure atomicity. Either both user AND events are deleted, or neither is deleted.
+ * **Event Publishing:**
+ * After deleting the user, publishes UserDeleted event that triggers event deletion
+ * in the Event Scheduling Context.
  *
- * **Cross-Context Dependency:**
- * This use case depends on IEventRepository from the Event Scheduling bounded context.
- * This is acceptable for cascade delete operations which must be atomic.
+ * **Bounded Context Compliance:**
+ * This use case has ZERO dependencies on Event Scheduling Context. Cross-context
+ * communication happens exclusively via domain events, maintaining proper bounded
+ * context separation per bounded-contexts.md.
  *
  * **Usage:**
  * ```typescript
- * const deleteUserUseCase = new DeleteUserUseCase(userRepository, eventRepository);
+ * const deleteUserUseCase = new DeleteUserUseCase(userRepository, eventBus);
  * await deleteUserUseCase.execute(userId);
- * console.log('User and all events deleted successfully');
+ * console.log('User deleted and event deletion triggered');
  * ```
  *
  * **Throws:**
@@ -30,15 +34,15 @@ import { UserNotFoundError } from '../../../../domain/errors/UserNotFoundError';
 export class DeleteUserUseCase {
   /**
    * @param userRepository - Repository port for user persistence operations
-   * @param eventRepository - Repository port for event persistence operations
+   * @param eventBus - Domain event bus for publishing domain events
    */
   public constructor(
     private readonly userRepository: IUserRepository,
-    private readonly eventRepository: IEventRepository
+    private readonly eventBus: IDomainEventBus
   ) {}
 
   /**
-   * Execute the use case to delete a user and all associated events
+   * Execute the use case to delete a user and publish domain event
    *
    * @param userId - UUID of the user to delete
    * @returns Promise that resolves when deletion is complete
@@ -52,10 +56,18 @@ export class DeleteUserUseCase {
       throw new UserNotFoundError(userId);
     }
 
-    // Delete all events for this user (cascade delete)
-    await this.eventRepository.deleteByUserId(userId);
-
     // Delete the user
     await this.userRepository.delete(userId);
+
+    // Publish UserDeleted domain event
+    const event: UserDeletedEvent = {
+      eventType: 'UserDeleted',
+      context: 'user',
+      occurredAt: DateTime.utc().toISO(),
+      aggregateId: userId,
+      userId,
+    };
+
+    await this.eventBus.publish(event);
   }
 }
