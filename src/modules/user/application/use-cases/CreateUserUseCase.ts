@@ -2,41 +2,44 @@ import { randomUUID } from 'crypto';
 import { DateTime } from 'luxon';
 import { CreateUserDTO, CreateUserSchema } from '@shared/validation/schemas';
 import { IUserRepository } from '../ports/IUserRepository';
-import { IEventRepository } from '@modules/event-scheduling/application/ports/IEventRepository';
-import { TimezoneService } from '@modules/event-scheduling/domain/services/TimezoneService';
-import { EventHandlerRegistry } from '@modules/event-scheduling/domain/services/event-handlers/EventHandlerRegistry';
+import { IDomainEventBus } from '@shared/events/IDomainEventBus';
+import { UserCreatedEvent } from '../../domain/events/UserCreated';
 import { User } from '../../domain/entities/User';
-import { Event } from '@modules/event-scheduling/domain/entities/Event';
 import { DateOfBirth } from '../../domain/value-objects/DateOfBirth';
 import { Timezone } from '@shared/value-objects/Timezone';
-import { EventStatus } from '@modules/event-scheduling/domain/value-objects/EventStatus';
-import { IdempotencyKey } from '@modules/event-scheduling/domain/value-objects/IdempotencyKey';
 
 /**
  * CreateUserUseCase - Application layer use case for creating users
  *
- * This use case orchestrates the creation of a User entity and its corresponding
- * Birthday event in a single operation. It follows the Hexagonal Architecture
- * pattern by depending only on port interfaces (IUserRepository, IEventRepository)
- * and domain services (TimezoneService, EventHandlerRegistry).
+ * This use case orchestrates the creation of a User entity and publishes
+ * a domain event to notify other bounded contexts. It follows the Hexagonal
+ * Architecture pattern by depending only on port interfaces (IUserRepository,
+ * IDomainEventBus) without any direct dependencies on Event Scheduling Context.
  *
- * Responsibilities:
+ * **Bounded Context:** User Context
+ * **Layer:** Application
+ *
+ * **Responsibilities:**
  * - Validate input using Zod schema
  * - Create User domain entity with value objects
- * - Use Strategy Pattern (EventHandlerRegistry) to calculate next birthday
- * - Create Event domain entity with calculated timestamps
- * - Persist both user and event via repository interfaces
+ * - Persist user via IUserRepository
+ * - Publish UserCreatedEvent to IDomainEventBus
  *
- * Transaction atomicity is handled by the repository layer. This use case
- * calls both repositories sequentially, and the infrastructure layer ensures
- * that both operations succeed or both fail.
+ * **Event-Driven Architecture:**
+ * This use case publishes UserCreatedEvent after successful user creation.
+ * Event Scheduling Context subscribes to this event to create birthday events,
+ * ensuring complete decoupling between bounded contexts.
+ *
+ * **IMPORTANT:** This use case does NOT:
+ * - Calculate birthdays (belongs to Event Scheduling Context)
+ * - Create Event entities (belongs to Event Scheduling Context)
+ * - Convert timezones (belongs to Event Scheduling Context)
+ * - Depend on Event Scheduling services (violates bounded contexts)
  */
 export class CreateUserUseCase {
   public constructor(
     private readonly userRepository: IUserRepository,
-    private readonly eventRepository: IEventRepository,
-    private readonly timezoneService: TimezoneService,
-    private readonly eventHandlerRegistry: EventHandlerRegistry
+    private readonly eventBus: IDomainEventBus
   ) {}
 
   /**
@@ -56,17 +59,11 @@ export class CreateUserUseCase {
     // Step 2: Create User domain entity with value objects
     const user = this.createUserEntity(validatedDto);
 
-    // Step 3: Calculate next birthday using Strategy Pattern
-    const handler = this.eventHandlerRegistry.getHandler('BIRTHDAY');
-    const nextBirthdayLocal = handler.calculateNextOccurrence(user);
-    const nextBirthdayUTC = this.timezoneService.convertToUTC(nextBirthdayLocal, user.timezone);
-
-    // Step 4: Create Event domain entity
-    const event = this.createEventEntity(user, nextBirthdayLocal, nextBirthdayUTC, handler);
-
-    // Step 5: Persist user and event (transaction atomicity handled by repository layer)
+    // Step 3: Persist user to database
     const savedUser = await this.userRepository.create(user);
-    await this.eventRepository.create(event);
+
+    // Step 4: Publish UserCreatedEvent to notify other bounded contexts
+    await this.publishUserCreatedEvent(savedUser);
 
     return savedUser;
   }
@@ -92,36 +89,27 @@ export class CreateUserUseCase {
   }
 
   /**
-   * Create Event domain entity for birthday
+   * Publish UserCreatedEvent to event bus
    *
-   * @param user - The user for whom to create the event
-   * @param nextBirthdayLocal - Next birthday at 9:00 AM local time
-   * @param nextBirthdayUTC - Next birthday in UTC
-   * @param handler - Birthday event handler (for formatting message)
-   * @returns Event entity
+   * This event notifies other bounded contexts (e.g., Event Scheduling Context)
+   * that a new user has been created, allowing them to react accordingly
+   * (e.g., create birthday events).
+   *
+   * @param user - The created user entity
    */
-  private createEventEntity(
-    user: User,
-    nextBirthdayLocal: DateTime,
-    nextBirthdayUTC: DateTime,
-    handler: { formatMessage: (user: User) => string }
-  ): Event {
-    return new Event({
-      id: randomUUID(),
+  private async publishUserCreatedEvent(user: User): Promise<void> {
+    const event: UserCreatedEvent = {
+      eventType: 'UserCreated',
+      context: 'user',
+      occurredAt: DateTime.now().toISO(),
+      aggregateId: user.id,
       userId: user.id,
-      eventType: 'BIRTHDAY',
-      status: EventStatus.PENDING,
-      targetTimestampUTC: nextBirthdayUTC,
-      targetTimestampLocal: nextBirthdayLocal,
-      targetTimezone: user.timezone.toString(),
-      idempotencyKey: IdempotencyKey.generate(user.id, nextBirthdayUTC),
-      deliveryPayload: { message: handler.formatMessage(user) },
-      version: 1,
-      retryCount: 0,
-      executedAt: null,
-      failureReason: null,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    });
+      firstName: user.firstName,
+      lastName: user.lastName,
+      dateOfBirth: user.dateOfBirth.toString(),
+      timezone: user.timezone.toString(),
+    };
+
+    await this.eventBus.publish(event);
   }
 }

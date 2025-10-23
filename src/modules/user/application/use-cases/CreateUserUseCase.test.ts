@@ -3,27 +3,20 @@
 import { CreateUserUseCase } from './CreateUserUseCase';
 import { CreateUserDTO } from '@shared/validation/schemas';
 import { IUserRepository } from '../ports/IUserRepository';
-import { IEventRepository } from '@modules/event-scheduling/application/ports/IEventRepository';
-import { TimezoneService } from '@modules/event-scheduling/domain/services/TimezoneService';
-import { EventHandlerRegistry } from '@modules/event-scheduling/domain/services/event-handlers/EventHandlerRegistry';
-import { BirthdayEventHandler } from '@modules/event-scheduling/domain/services/event-handlers/BirthdayEventHandler';
+import { IDomainEventBus } from '@shared/events/IDomainEventBus';
+import { UserCreatedEvent } from '../../domain/events/UserCreated';
 import { User } from '../../domain/entities/User';
-import { Event } from '@modules/event-scheduling/domain/entities/Event';
 import { DateOfBirth } from '../../domain/value-objects/DateOfBirth';
 import { Timezone } from '@shared/value-objects/Timezone';
-import { EventStatus } from '@modules/event-scheduling/domain/value-objects/EventStatus';
 import { DateTime } from 'luxon';
 
 describe('CreateUserUseCase', () => {
   let useCase: CreateUserUseCase;
   let mockUserRepository: jest.Mocked<IUserRepository>;
-  let mockEventRepository: jest.Mocked<IEventRepository>;
-  let mockTimezoneService: jest.Mocked<TimezoneService>;
-  let mockEventHandlerRegistry: jest.Mocked<EventHandlerRegistry>;
-  let mockBirthdayHandler: jest.Mocked<BirthdayEventHandler>;
+  let mockEventBus: jest.Mocked<IDomainEventBus>;
 
   beforeEach(() => {
-    // Mock repositories
+    // Mock UserRepository
     mockUserRepository = {
       create: jest.fn(),
       findById: jest.fn(),
@@ -33,51 +26,18 @@ describe('CreateUserUseCase', () => {
       findUsersWithUpcomingBirthdays: jest.fn(),
     } as jest.Mocked<IUserRepository>;
 
-    mockEventRepository = {
-      create: jest.fn(),
-      findById: jest.fn(),
-      findByUserId: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      deleteByUserId: jest.fn(),
-      claimReadyEvents: jest.fn(),
-      findBySpecification: jest.fn(),
-    } as jest.Mocked<IEventRepository>;
+    // Mock IDomainEventBus
+    mockEventBus = {
+      publish: jest.fn(),
+      subscribe: jest.fn(),
+    } as jest.Mocked<IDomainEventBus>;
 
-    // Mock TimezoneService
-    mockTimezoneService = {
-      convertToUTC: jest.fn(),
-      convertToLocalTime: jest.fn(),
-      isValidTimezone: jest.fn(),
-    } as unknown as jest.Mocked<TimezoneService>;
-
-    // Mock BirthdayEventHandler
-    mockBirthdayHandler = {
-      eventType: 'BIRTHDAY',
-      calculateNextOccurrence: jest.fn(),
-      formatMessage: jest.fn(),
-      generateEvent: jest.fn(),
-      selectDeliveryChannel: jest.fn(),
-    } as unknown as jest.Mocked<BirthdayEventHandler>;
-
-    // Mock EventHandlerRegistry
-    mockEventHandlerRegistry = {
-      register: jest.fn(),
-      getHandler: jest.fn().mockReturnValue(mockBirthdayHandler),
-      getSupportedEventTypes: jest.fn(),
-    } as unknown as jest.Mocked<EventHandlerRegistry>;
-
-    // Create use case instance
-    useCase = new CreateUserUseCase(
-      mockUserRepository,
-      mockEventRepository,
-      mockTimezoneService,
-      mockEventHandlerRegistry
-    );
+    // Create use case instance with only 2 dependencies
+    useCase = new CreateUserUseCase(mockUserRepository, mockEventBus);
   });
 
   describe('execute', () => {
-    it('should create user and event atomically with correct timezone calculations', async () => {
+    it('should create user and publish UserCreatedEvent', async () => {
       // Arrange
       const dto: CreateUserDTO = {
         firstName: 'John',
@@ -86,19 +46,9 @@ describe('CreateUserUseCase', () => {
         timezone: 'America/New_York',
       };
 
-      const nextBirthdayLocal = DateTime.fromISO('2026-01-15T09:00:00', {
-        zone: 'America/New_York',
-      });
-      const nextBirthdayUTC = DateTime.fromISO('2026-01-15T14:00:00', { zone: 'UTC' });
-
-      // Mock handler calculations
-      mockBirthdayHandler.calculateNextOccurrence.mockReturnValue(nextBirthdayLocal);
-      mockBirthdayHandler.formatMessage.mockReturnValue("Hey, John Doe it's your birthday");
-      mockTimezoneService.convertToUTC.mockReturnValue(nextBirthdayUTC);
-
-      // Mock repository responses (return the entities we expect)
+      // Mock repository response (return the user entity)
       mockUserRepository.create.mockImplementation((user: User) => Promise.resolve(user));
-      mockEventRepository.create.mockImplementation((event: Event) => Promise.resolve(event));
+      mockEventBus.publish.mockResolvedValue(undefined);
 
       // Act
       const result = await useCase.execute(dto);
@@ -115,36 +65,73 @@ describe('CreateUserUseCase', () => {
       expect(createdUser.timezone).toBeInstanceOf(Timezone);
       expect(createdUser.timezone.toString()).toBe('America/New_York');
 
-      // Assert - Verify event was created
-      expect(mockEventRepository.create).toHaveBeenCalledTimes(1);
-      const eventCall = mockEventRepository.create.mock.calls[0];
-      expect(eventCall).toBeDefined();
-      const createdEvent = eventCall![0];
-      expect(createdEvent).toBeInstanceOf(Event);
-      expect(createdEvent.eventType).toBe('BIRTHDAY');
-      expect(createdEvent.status).toBe(EventStatus.PENDING);
-      expect(createdEvent.targetTimestampUTC.toISO()).toBe(nextBirthdayUTC.toISO());
-      expect(createdEvent.targetTimestampLocal.toISO()).toBe(nextBirthdayLocal.toISO());
-      expect(createdEvent.targetTimezone).toBe('America/New_York');
-
-      // Assert - Verify handler was called correctly
-      expect(mockEventHandlerRegistry.getHandler).toHaveBeenCalledWith('BIRTHDAY');
-      expect(mockBirthdayHandler.calculateNextOccurrence).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: createdUser.id,
-          firstName: createdUser.firstName,
-          lastName: createdUser.lastName,
-        })
-      );
-      expect(mockTimezoneService.convertToUTC).toHaveBeenCalledWith(
-        nextBirthdayLocal,
-        expect.any(Timezone)
-      );
+      // Assert - Verify UserCreatedEvent was published
+      expect(mockEventBus.publish).toHaveBeenCalledTimes(1);
+      const publishCall = mockEventBus.publish.mock.calls[0];
+      expect(publishCall).toBeDefined();
+      const publishedEvent = publishCall![0] as UserCreatedEvent;
+      expect(publishedEvent.eventType).toBe('UserCreated');
+      expect(publishedEvent.context).toBe('user');
+      expect(publishedEvent.occurredAt).toBeDefined();
+      expect(publishedEvent.aggregateId).toBe(createdUser.id);
+      expect(publishedEvent.userId).toBe(createdUser.id);
+      expect(publishedEvent.firstName).toBe('John');
+      expect(publishedEvent.lastName).toBe('Doe');
+      expect(publishedEvent.dateOfBirth).toBe('1990-01-15');
+      expect(publishedEvent.timezone).toBe('America/New_York');
 
       // Assert - Verify result is the created user
       expect(result).toBeInstanceOf(User);
       expect(result.firstName).toBe('John');
       expect(result.lastName).toBe('Doe');
+    });
+
+    it('should publish event AFTER user persisted (correct ordering)', async () => {
+      // Arrange
+      const dto: CreateUserDTO = {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        dateOfBirth: '1985-06-20',
+        timezone: 'Europe/London',
+      };
+
+      const callOrder: string[] = [];
+
+      mockUserRepository.create.mockImplementation((user: User) => {
+        callOrder.push('userRepository.create');
+        return Promise.resolve(user);
+      });
+
+      mockEventBus.publish.mockImplementation(() => {
+        callOrder.push('eventBus.publish');
+        return Promise.resolve();
+      });
+
+      // Act
+      await useCase.execute(dto);
+
+      // Assert - Verify call order
+      expect(callOrder).toEqual(['userRepository.create', 'eventBus.publish']);
+    });
+
+    it('should NOT publish event if user creation fails', async () => {
+      // Arrange
+      const dto: CreateUserDTO = {
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: '1990-01-15',
+        timezone: 'America/New_York',
+      };
+
+      const repositoryError = new Error('Database connection failed');
+      mockUserRepository.create.mockRejectedValue(repositoryError);
+
+      // Act & Assert
+      await expect(useCase.execute(dto)).rejects.toThrow('Database connection failed');
+
+      // Assert - User repository was called, but event bus should NOT be called
+      expect(mockUserRepository.create).toHaveBeenCalledTimes(1);
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
 
     it('should throw InvalidTimezoneError for invalid timezone', async () => {
@@ -159,9 +146,9 @@ describe('CreateUserUseCase', () => {
       // Act & Assert
       await expect(useCase.execute(dto)).rejects.toThrow('Invalid timezone');
 
-      // Assert - No repository methods should be called
+      // Assert - No repository or event bus methods should be called
       expect(mockUserRepository.create).not.toHaveBeenCalled();
-      expect(mockEventRepository.create).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
 
     it('should throw InvalidDateOfBirthError for future date', async () => {
@@ -180,9 +167,9 @@ describe('CreateUserUseCase', () => {
       // Act & Assert
       await expect(useCase.execute(dto)).rejects.toThrow('Date of birth cannot be in the future');
 
-      // Assert - No repository methods should be called
+      // Assert - No repository or event bus methods should be called
       expect(mockUserRepository.create).not.toHaveBeenCalled();
-      expect(mockEventRepository.create).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
 
     it('should throw ZodError for invalid input format', async () => {
@@ -197,39 +184,25 @@ describe('CreateUserUseCase', () => {
       // Act & Assert
       await expect(useCase.execute(invalidDto)).rejects.toThrow();
 
-      // Assert - No repository methods should be called
+      // Assert - No repository or event bus methods should be called
       expect(mockUserRepository.create).not.toHaveBeenCalled();
-      expect(mockEventRepository.create).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
 
-    it('should handle repository failure and propagate error', async () => {
+    it('should throw ZodError for missing required fields', async () => {
       // Arrange
-      const dto: CreateUserDTO = {
+      const invalidDto = {
         firstName: 'John',
         lastName: 'Doe',
-        dateOfBirth: '1990-01-15',
-        timezone: 'America/New_York',
-      };
-
-      const nextBirthdayLocal = DateTime.fromISO('2026-01-15T09:00:00', {
-        zone: 'America/New_York',
-      });
-      const nextBirthdayUTC = DateTime.fromISO('2026-01-15T14:00:00', { zone: 'UTC' });
-
-      mockBirthdayHandler.calculateNextOccurrence.mockReturnValue(nextBirthdayLocal);
-      mockBirthdayHandler.formatMessage.mockReturnValue("Hey, John Doe it's your birthday");
-      mockTimezoneService.convertToUTC.mockReturnValue(nextBirthdayUTC);
-
-      // Mock repository to throw error
-      const repositoryError = new Error('Database connection failed');
-      mockUserRepository.create.mockRejectedValue(repositoryError);
+        // Missing dateOfBirth and timezone
+      } as CreateUserDTO;
 
       // Act & Assert
-      await expect(useCase.execute(dto)).rejects.toThrow('Database connection failed');
+      await expect(useCase.execute(invalidDto)).rejects.toThrow();
 
-      // Assert - User repository was called, but event repository should not be called
-      expect(mockUserRepository.create).toHaveBeenCalledTimes(1);
-      expect(mockEventRepository.create).not.toHaveBeenCalled();
+      // Assert - No repository or event bus methods should be called
+      expect(mockUserRepository.create).not.toHaveBeenCalled();
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
   });
 });
