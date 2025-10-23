@@ -1,5 +1,6 @@
 import { UserDeletedEvent } from '../../../user/domain/events/UserDeleted';
 import { IEventRepository } from '../ports/IEventRepository';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Event handler that reacts to UserDeleted domain events and deletes all associated events.
@@ -41,7 +42,8 @@ export class DeleteEventsOnUserDeletedHandler {
       await this.eventRepository.deleteByUserId(event.userId);
     } catch (error) {
       // Log error with event context for debugging
-      console.error('Failed to delete events from UserDeleted event', {
+      logger.error({
+        msg: 'Failed to delete events from UserDeleted event',
         eventType: event.eventType,
         userId: event.userId,
         aggregateId: event.aggregateId,

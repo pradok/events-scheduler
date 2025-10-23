@@ -10,6 +10,7 @@ import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
 import { RescheduleBirthdayEventsUseCase } from '../use-cases/RescheduleBirthdayEventsUseCase';
+import { logger } from '../../../../shared/logger';
 
 describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
   let handler: RescheduleEventsOnUserBirthdayChangedHandler;
@@ -282,14 +283,14 @@ describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
       const pendingEvent = createPendingBirthdayEvent(event.userId);
       mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
       mockEventRepository.update.mockRejectedValue(new Error('Database error'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act & Assert
       await expect(handler.handle(event)).rejects.toThrow('Database error');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to reschedule birthday events from UserBirthdayChanged event',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Failed to reschedule birthday events from UserBirthdayChanged event',
           eventType: 'UserBirthdayChanged',
           userId: 'user-123',
           aggregateId: 'user-123',
@@ -297,7 +298,7 @@ describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should increment version for each rescheduled event', async () => {

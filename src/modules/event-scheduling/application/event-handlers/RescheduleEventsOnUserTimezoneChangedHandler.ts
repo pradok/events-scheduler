@@ -1,5 +1,6 @@
 import { UserTimezoneChangedEvent } from '../../../user/domain/events/UserTimezoneChanged';
 import { RescheduleEventsOnTimezoneChangeUseCase } from '../use-cases/RescheduleEventsOnTimezoneChangeUseCase';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Event handler that reacts to UserTimezoneChanged domain events and reschedules events.
@@ -48,7 +49,8 @@ export class RescheduleEventsOnUserTimezoneChangedHandler {
       });
     } catch (error) {
       // Log error with event context for debugging
-      console.error('Failed to reschedule events from UserTimezoneChanged event', {
+      logger.error({
+        msg: 'Failed to reschedule events from UserTimezoneChanged event',
         eventType: event.eventType,
         userId: event.userId,
         aggregateId: event.aggregateId,

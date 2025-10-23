@@ -1,5 +1,6 @@
 import { UserBirthdayChangedEvent } from '../../../user/domain/events/UserBirthdayChanged';
 import { RescheduleBirthdayEventsUseCase } from '../use-cases/RescheduleBirthdayEventsUseCase';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Event handler that reacts to UserBirthdayChanged domain events.
@@ -44,7 +45,8 @@ export class RescheduleEventsOnUserBirthdayChangedHandler {
       });
     } catch (error) {
       // Log event context for debugging
-      console.error('Failed to reschedule birthday events from UserBirthdayChanged event', {
+      logger.error({
+        msg: 'Failed to reschedule birthday events from UserBirthdayChanged event',
         eventType: event.eventType,
         userId: event.userId,
         aggregateId: event.aggregateId,

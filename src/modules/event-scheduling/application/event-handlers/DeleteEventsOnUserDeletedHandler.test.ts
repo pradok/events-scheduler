@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import { DeleteEventsOnUserDeletedHandler } from './DeleteEventsOnUserDeletedHandler';
 import { UserDeletedEvent } from '../../../user/domain/events/UserDeleted';
 import { IEventRepository } from '../ports/IEventRepository';
+import { logger } from '../../../../shared/logger';
 
 describe('DeleteEventsOnUserDeletedHandler', () => {
   let handler: DeleteEventsOnUserDeletedHandler;
@@ -63,14 +64,14 @@ describe('DeleteEventsOnUserDeletedHandler', () => {
       // Arrange
       const event = createUserDeletedEvent();
       mockEventRepository.deleteByUserId.mockRejectedValue(new Error('Database error'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act & Assert
       await expect(handler.handle(event)).rejects.toThrow('Database error');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to delete events from UserDeleted event',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Failed to delete events from UserDeleted event',
           eventType: 'UserDeleted',
           userId: 'user-123',
           aggregateId: 'user-123',
@@ -78,7 +79,7 @@ describe('DeleteEventsOnUserDeletedHandler', () => {
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should delete events for correct user ID', async () => {

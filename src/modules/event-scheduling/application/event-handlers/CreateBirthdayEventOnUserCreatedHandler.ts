@@ -1,5 +1,6 @@
 import { UserCreatedEvent } from '../../../user/domain/events/UserCreated';
 import { CreateBirthdayEventUseCase } from '../use-cases/CreateBirthdayEventUseCase';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Event handler that reacts to UserCreated domain events.
@@ -44,7 +45,8 @@ export class CreateBirthdayEventOnUserCreatedHandler {
       });
     } catch (error) {
       // Log event context for debugging
-      console.error('Failed to create birthday event from UserCreated event', {
+      logger.error({
+        msg: 'Failed to create birthday event from UserCreated event',
         eventType: event.eventType,
         userId: event.userId,
         aggregateId: event.aggregateId,

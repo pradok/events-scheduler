@@ -65,10 +65,8 @@ module.exports = {
       {
         selector: 'interface',
         format: ['PascalCase'],
-        custom: {
-          regex: '^I[A-Z]',
-          match: false,
-        },
+        // Note: Project uses both I-prefixed (ports) and non-prefixed interfaces
+        // Both patterns are acceptable for hexagonal architecture
       },
       {
         selector: 'class',
@@ -77,6 +75,12 @@ module.exports = {
       {
         selector: 'variable',
         format: ['camelCase', 'UPPER_CASE'],
+      },
+      {
+        // Allow PascalCase for Zod schemas (e.g., CreateUserSchema)
+        selector: 'variable',
+        filter: 'Schema$',
+        format: ['PascalCase'],
       },
       {
         selector: 'function',

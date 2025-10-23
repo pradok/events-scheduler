@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import { InMemoryEventBus } from './InMemoryEventBus';
 import { DomainEvent } from './DomainEvent';
+import { logger } from '../logger';
 
 /**
  * Test event interface for unit testing
@@ -146,8 +147,8 @@ describe('InMemoryEventBus', () => {
       eventBus.subscribe('TestEvent', handler2);
       eventBus.subscribe('TestEvent', handler3);
 
-      // Mock console.error to verify error logging
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      // Mock logger.error to verify error logging
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act
       await eventBus.publish(createTestEvent());
@@ -156,16 +157,16 @@ describe('InMemoryEventBus', () => {
       expect(handler1).toHaveBeenCalledTimes(1);
       expect(handler2).toHaveBeenCalledTimes(1);
       expect(handler3).toHaveBeenCalledTimes(1); // ✅ Handler 3 executed despite handler 2 failure
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Domain event handler failed',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Domain event handler failed',
           eventType: 'TestEvent',
           handlerIndex: 1,
           error: 'Handler 2 failed',
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should log error details when handler fails', async () => {
@@ -175,15 +176,15 @@ describe('InMemoryEventBus', () => {
 
       eventBus.subscribe('TestEvent', handler);
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act
       await eventBus.publish(createTestEvent());
 
       // Assert
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Domain event handler failed',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Domain event handler failed',
           eventType: 'TestEvent',
           context: 'test',
           aggregateId: 'test-aggregate-123',
@@ -194,7 +195,7 @@ describe('InMemoryEventBus', () => {
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should handle non-Error exceptions gracefully', async () => {
@@ -203,21 +204,21 @@ describe('InMemoryEventBus', () => {
 
       eventBus.subscribe('TestEvent', handler);
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act
       await eventBus.publish(createTestEvent());
 
       // Assert
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Domain event handler failed',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Domain event handler failed',
           error: 'String error message',
           stack: undefined, // Non-Error objects don't have stack
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should handle multiple event types independently', async () => {
@@ -282,13 +283,13 @@ describe('InMemoryEventBus', () => {
 
       eventBus.subscribe('TestEvent', handler);
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act & Assert - Should not throw
       await expect(eventBus.publish(createTestEvent())).resolves.toBeUndefined();
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(loggerErrorSpy).toHaveBeenCalled();
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should handle handlers with different execution times', async () => {

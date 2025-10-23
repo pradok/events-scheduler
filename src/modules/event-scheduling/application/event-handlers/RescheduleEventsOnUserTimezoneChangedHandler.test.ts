@@ -8,6 +8,7 @@ import { RescheduleEventsOnTimezoneChangeUseCase } from '../use-cases/Reschedule
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
+import { logger } from '../../../../shared/logger';
 
 describe('RescheduleEventsOnUserTimezoneChangedHandler', () => {
   let handler: RescheduleEventsOnUserTimezoneChangedHandler;
@@ -265,14 +266,14 @@ describe('RescheduleEventsOnUserTimezoneChangedHandler', () => {
       const pendingEvent = createPendingEvent(event.userId);
       mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
       mockEventRepository.update.mockRejectedValue(new Error('Database error'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act & Assert
       await expect(handler.handle(event)).rejects.toThrow('Database error');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to reschedule events from UserTimezoneChanged event',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Failed to reschedule events from UserTimezoneChanged event',
           eventType: 'UserTimezoneChanged',
           userId: 'user-123',
           aggregateId: 'user-123',
@@ -280,7 +281,7 @@ describe('RescheduleEventsOnUserTimezoneChangedHandler', () => {
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should increment version for each rescheduled event', async () => {

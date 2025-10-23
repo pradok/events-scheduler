@@ -8,6 +8,7 @@ import { BirthdayEventHandler } from '../../domain/services/event-handlers/Birth
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { CreateBirthdayEventUseCase } from '../use-cases/CreateBirthdayEventUseCase';
+import { logger } from '../../../../shared/logger';
 
 describe('CreateBirthdayEventOnUserCreatedHandler', () => {
   let handler: CreateBirthdayEventOnUserCreatedHandler;
@@ -183,14 +184,14 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
       // Arrange
       const event = createUserCreatedEvent();
       mockEventRepository.create.mockRejectedValue(new Error('Database error'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation();
 
       // Act & Assert
       await expect(handler.handle(event)).rejects.toThrow('Database error');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to create birthday event from UserCreated event',
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          msg: 'Failed to create birthday event from UserCreated event',
           eventType: 'UserCreated',
           userId: 'user-123',
           aggregateId: 'user-123',
@@ -198,7 +199,7 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
         })
       );
 
-      consoleErrorSpy.mockRestore();
+      loggerErrorSpy.mockRestore();
     });
 
     it('should set all Event properties correctly', async () => {

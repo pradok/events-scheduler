@@ -1,5 +1,6 @@
 import { DomainEvent } from './DomainEvent';
 import { IDomainEventBus } from './IDomainEventBus';
+import { logger } from '../logger';
 
 /**
  * In-memory implementation of domain event bus for Phase 1 (MVP).
@@ -101,7 +102,8 @@ export class InMemoryEventBus implements IDomainEventBus {
         await handler(event);
       } catch (error) {
         // Log error but continue processing other handlers (resilient)
-        console.error('Domain event handler failed', {
+        logger.error({
+          msg: 'Domain event handler failed',
           eventType: event.eventType,
           context: event.context,
           aggregateId: event.aggregateId,
