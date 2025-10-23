@@ -1,8 +1,10 @@
 # Source Tree Structure
 
-**Hexagonal Architecture + DDD with npm workspaces**
+**Hexagonal Architecture + DDD + Bounded Contexts with npm workspaces**
 
 Reference: [Full Architecture Document](../architecture.md#source-tree)
+
+**Note:** ✅ **Story 1.7b** - Reorganized to bounded context folder structure
 
 ---
 
@@ -18,86 +20,87 @@ bday/
 ├── prisma/
 │   ├── schema.prisma                   # Prisma schema definition
 │   ├── migrations/                     # Database migration files
-│   │   └── 20250118_init/
+│   │   └── 20251020_init/
 │   │       └── migration.sql
 │   └── seed.ts                         # Database seeding script
 │
 ├── src/
-│   ├── domain/                         # PURE business logic (no dependencies)
-│   │   ├── entities/
-│   │   │   ├── User.ts                 # User aggregate root
-│   │   │   ├── User.test.ts            # User unit tests
-│   │   │   ├── Event.ts                # Event aggregate root
-│   │   │   └── Event.test.ts           # Event unit tests
-│   │   ├── value-objects/
-│   │   │   ├── Timezone.ts             # IANA timezone value object
-│   │   │   ├── Timezone.test.ts        # Timezone unit tests
-│   │   │   ├── EventStatus.ts          # Event status enum
-│   │   │   ├── EventStatus.test.ts     # EventStatus unit tests
-│   │   │   ├── DateOfBirth.ts          # Birthday value object
-│   │   │   ├── DateOfBirth.test.ts     # DateOfBirth unit tests
-│   │   │   ├── IdempotencyKey.ts       # Idempotency key generator
-│   │   │   └── IdempotencyKey.test.ts  # IdempotencyKey unit tests
-│   │   ├── services/
-│   │   │   ├── TimezoneService.ts      # ✅ DONE (Story 1.5) - Timezone conversion utility
-│   │   │   ├── TimezoneService.test.ts # ✅ DONE (Story 1.5) - 15 tests
-│   │   │   ├── event-handlers/         # ✅ DONE (Story 1.5) - Strategy pattern for event types
-│   │   │   │   ├── IEventHandler.ts    # ✅ DONE (Story 1.5) - Event handler interface
-│   │   │   │   ├── EventHandlerRegistry.ts     # ✅ DONE (Story 1.5) - Strategy registry
-│   │   │   │   ├── EventHandlerRegistry.test.ts # ✅ DONE (Story 1.5) - 16 tests
-│   │   │   │   ├── BirthdayEventHandler.ts       # ✅ DONE (Story 1.5) - Birthday strategy
-│   │   │   │   ├── BirthdayEventHandler.test.ts  # ✅ DONE (Story 1.5) - 18 tests
-│   │   │   │   ├── AnniversaryEventHandler.ts    # Phase 2+
-│   │   │   │   ├── ReminderEventHandler.ts       # Phase 2+
-│   │   │   │   └── SubscriptionEventHandler.ts   # Phase 2+
-│   │   ├── factories/                  # Factory pattern for entity creation
-│   │   │   ├── EventFactory.ts         # Event factory with business logic
-│   │   │   └── EventFactory.test.ts    # Event factory unit tests
-│   │   ├── validators/                 # Chain of Responsibility pattern
-│   │   │   ├── IEventValidator.ts      # Validator interface
-│   │   │   ├── EventStatusValidator.ts
-│   │   │   ├── EventStatusValidator.test.ts
-│   │   │   ├── EventTimestampValidator.ts
-│   │   │   ├── EventTimestampValidator.test.ts
-│   │   │   ├── IdempotencyValidator.ts
-│   │   │   └── IdempotencyValidator.test.ts
-│   │   ├── observers/                  # Observer pattern for event lifecycle
-│   │   │   ├── IEventObserver.ts       # Observer interface
-│   │   │   ├── MetricsObserver.ts
-│   │   │   ├── MetricsObserver.test.ts
-│   │   │   ├── LoggingObserver.ts
-│   │   │   ├── LoggingObserver.test.ts
-│   │   │   ├── AuditObserver.ts
-│   │   │   └── AuditObserver.test.ts
-│   │   ├── specifications/             # Specification pattern for queries
-│   │   │   ├── ISpecification.ts       # Specification interface
-│   │   │   ├── EventsByStatusSpec.ts
-│   │   │   ├── EventsByStatusSpec.test.ts
-│   │   │   ├── EventsByTimestampSpec.ts
-│   │   │   ├── EventsByTimestampSpec.test.ts
-│   │   │   ├── AndSpecification.ts
-│   │   │   └── OrSpecification.ts
-│   │   ├── errors/
-│   │   │   ├── DomainError.ts          # Base domain error
-│   │   │   ├── InvalidTimezoneError.ts
-│   │   │   └── InvalidDateOfBirthError.ts
-│   │   └── integration-tests/          # Domain integration tests
-│   │       ├── event-generation.test.ts
-│   │       └── timezone-calculations.test.ts
+│   ├── modules/                        # ✅ BOUNDED CONTEXTS (Story 1.7b)
+│   │   ├── user/                       # USER BOUNDED CONTEXT
+│   │   │   ├── domain/
+│   │   │   │   ├── entities/
+│   │   │   │   │   ├── User.ts         # ✅ User aggregate root
+│   │   │   │   │   └── User.test.ts    # ✅ User unit tests
+│   │   │   │   └── value-objects/
+│   │   │   │       ├── DateOfBirth.ts      # ✅ Birthday value object
+│   │   │   │       └── DateOfBirth.test.ts # ✅ DateOfBirth unit tests
+│   │   │   ├── application/
+│   │   │   │   ├── ports/
+│   │   │   │   │   ├── IUserRepository.ts      # ✅ User repository port
+│   │   │   │   │   └── IUserRepository.test.ts # ✅ Port tests
+│   │   │   │   └── use-cases/
+│   │   │   │       ├── CreateUserUseCase.ts    # ✅ DONE (Story 1.8)
+│   │   │   │       └── CreateUserUseCase.test.ts # ✅ Use case tests
+│   │   │   └── adapters/
+│   │   │       └── persistence/
+│   │   │           ├── PrismaUserRepository.ts  # ✅ DONE (Story 1.7)
+│   │   │           ├── PrismaUserRepository.integration.test.ts # ✅ 7 tests
+│   │   │           └── mappers/
+│   │   │               └── userMapper.ts        # ✅ Prisma ↔ Domain mapping
+│   │   │
+│   │   └── event-scheduling/           # EVENT SCHEDULING BOUNDED CONTEXT
+│   │       ├── domain/
+│   │       │   ├── entities/
+│   │       │   │   ├── Event.ts        # ✅ Event aggregate root
+│   │       │   │   └── Event.test.ts   # ✅ Event unit tests
+│   │       │   ├── value-objects/
+│   │       │   │   ├── EventStatus.ts          # ✅ Event status enum
+│   │       │   │   ├── EventStatus.test.ts     # ✅ EventStatus tests
+│   │       │   │   ├── IdempotencyKey.ts       # ✅ Idempotency key generator
+│   │       │   │   └── IdempotencyKey.test.ts  # ✅ IdempotencyKey tests
+│   │       │   └── services/
+│   │       │       ├── TimezoneService.ts      # ✅ DONE (Story 1.5)
+│   │       │       ├── TimezoneService.test.ts # ✅ 15 tests
+│   │       │       └── event-handlers/         # ✅ DONE (Story 1.5)
+│   │       │           ├── IEventHandler.ts    # ✅ Event handler interface
+│   │       │           ├── EventHandlerRegistry.ts     # ✅ Strategy registry
+│   │       │           ├── EventHandlerRegistry.test.ts # ✅ 16 tests
+│   │       │           ├── BirthdayEventHandler.ts       # ✅ Birthday strategy
+│   │       │           └── BirthdayEventHandler.test.ts  # ✅ 18 tests
+│   │       ├── application/
+│   │       │   └── ports/
+│   │       │       ├── IEventRepository.ts      # ✅ Event repository port
+│   │       │       └── IEventRepository.test.ts # ✅ Port tests
+│   │       └── adapters/
+│   │           └── persistence/
+│   │               ├── PrismaEventRepository.ts  # ✅ DONE (Story 1.7)
+│   │               ├── PrismaEventRepository.integration.test.ts # ✅ 11 tests
+│   │               └── mappers/
+│   │                   └── eventMapper.ts        # ✅ Prisma ↔ Domain mapping
 │   │
-│   ├── application/                    # Use cases / orchestration
-│   │   ├── ports/                      # Interface definitions (contracts)
-│   │   │   ├── IUserRepository.ts
-│   │   │   ├── IEventRepository.ts
-│   │   │   ├── IMessageSender.ts
-│   │   │   └── IDeliveryAdapter.ts
-│   │   └── use-cases/
-│   │       ├── user/
-│   │       │   ├── CreateUserUseCase.ts
-│   │       │   ├── CreateUserUseCase.test.ts
-│   │       │   ├── GetUserUseCase.ts
-│   │       │   ├── GetUserUseCase.test.ts
-│   │       │   ├── UpdateUserUseCase.ts
+│   ├── shared/                         # ✅ SHARED KERNEL (Story 1.7b)
+│   │   ├── value-objects/
+│   │   │   ├── Timezone.ts             # ✅ IANA timezone (shared)
+│   │   │   └── Timezone.test.ts        # ✅ Timezone tests
+│   │   └── validation/
+│   │       └── schemas.ts              # ✅ Zod schemas
+│   │
+│   ├── domain/                         # Legacy shared domain artifacts
+│   │   ├── errors/                     # Shared error classes
+│   │   │   ├── DomainError.ts
+│   │   │   ├── InvalidTimezoneError.ts
+│   │   │   ├── InvalidDateOfBirthError.ts
+│   │   │   ├── InvalidStateTransitionError.ts
+│   │   │   ├── ValidationError.ts
+│   │   │   └── OptimisticLockError.ts
+│   │   └── schemas/                    # Prisma-generated schemas
+│   │       ├── EntitySchemas.ts        # User & Event schemas
+│   │       └── generated/              # Auto-generated Prisma schemas
+│   │
+│   ├── __tests__/                      # Shared test utilities
+│   │   └── integration/
+│   │       └── helpers/
+│   │           └── testDatabase.ts     # ✅ Test DB helpers
 │   │       │   ├── UpdateUserUseCase.test.ts
 │   │       │   ├── DeleteUserUseCase.ts
 │   │       │   └── DeleteUserUseCase.test.ts

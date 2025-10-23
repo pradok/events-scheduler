@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { DateTime } from 'luxon';
-import { Timezone } from '../value-objects/Timezone';
-import { DateOfBirth } from '../value-objects/DateOfBirth';
-import { IdempotencyKey } from '../value-objects/IdempotencyKey';
+import { Timezone } from '@shared/value-objects/Timezone';
+import { DateOfBirth } from '@modules/user/domain/value-objects/DateOfBirth';
+import { IdempotencyKey } from '@modules/event-scheduling/domain/value-objects/IdempotencyKey';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { EventStatus } from '../value-objects/EventStatus';
+import { EventStatus } from '@modules/event-scheduling/domain/value-objects/EventStatus';
 import { UserSchema as GeneratedUserSchema } from './generated/schemas/models/User.schema';
 import { EventSchema as GeneratedEventSchema } from './generated/schemas/models/Event.schema';
 

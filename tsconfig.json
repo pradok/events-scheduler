@@ -8,6 +8,12 @@
     /* Modules */
     "moduleResolution": "node",
     "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@modules/user/*": ["src/modules/user/*"],
+      "@modules/event-scheduling/*": ["src/modules/event-scheduling/*"],
+      "@shared/*": ["src/shared/*"]
+    },
 
     /* Emit */
     "outDir": "./dist",

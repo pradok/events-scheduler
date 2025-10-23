@@ -26,4 +26,9 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js'],
   verbose: true,
+  moduleNameMapper: {
+    '^@modules/user/(.*)$': '<rootDir>/src/modules/user/$1',
+    '^@modules/event-scheduling/(.*)$': '<rootDir>/src/modules/event-scheduling/$1',
+    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+  },
 };
