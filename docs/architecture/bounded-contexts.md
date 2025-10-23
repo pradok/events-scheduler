@@ -19,6 +19,60 @@ The system is designed as a **Modular Monolith** with two distinct **Bounded Con
 
 ---
 
+## Folder Structure: Physical Separation by Bounded Context
+
+**DECISION:** We are implementing physical folder separation **now** (Story 1.7b), not postponing to Phase 2.
+
+**Rationale:** "I rather reorganise now than later which will be very hard" - easier at 53 files than 200+ files.
+
+### **Current Structure (After Story 1.7b)**
+
+```text
+src/modules/
+├── user/                           # User bounded context
+│   ├── domain/
+│   │   ├── entities/User.ts
+│   │   └── value-objects/DateOfBirth.ts
+│   ├── application/
+│   │   ├── ports/IUserRepository.ts
+│   │   └── use-cases/CreateUserUseCase.ts
+│   └── adapters/
+│       └── persistence/PrismaUserRepository.ts
+│
+└── event-scheduling/               # Event Scheduling bounded context
+    ├── domain/
+    │   ├── entities/Event.ts
+    │   ├── value-objects/EventStatus.ts
+    │   └── services/EventHandlerRegistry.ts
+    ├── application/
+    │   └── ports/IEventRepository.ts
+    └── adapters/
+        └── persistence/PrismaEventRepository.ts
+
+src/shared/                         # Shared Kernel
+├── events/                         # Domain event bus (Story 1.8)
+├── validation/schemas.ts
+└── value-objects/Timezone.ts
+```
+
+**Benefits of Early Reorganization:**
+
+- ✅ **Prevents Accidental Coupling** - Folder structure enforces context boundaries
+- ✅ **Easier Code Reviews** - Violations visible (wrong folder = wrong import)
+- ✅ **Microservice Ready** - Each `src/modules/*` can become separate repo
+- ✅ **Developer Onboarding** - Domain boundaries immediately clear
+- ✅ **Lower Risk Now** - Manageable at 53 files vs. 200+ files later
+
+**Bounded contexts enforced through:**
+
+- ✅ **Physical folder separation** (implemented in Story 1.7b)
+- ✅ **Domain events** (User publishes, Event subscribes - Story 1.8-1.10)
+- ✅ **Port interfaces** (IUserRepository, IEventRepository)
+- ✅ **TypeScript path aliases** (@modules/user/*, @modules/event-scheduling/*)
+- ✅ **Code review** (cross-context imports visible and reviewable)
+
+---
+
 ## Bounded Contexts
 
 ### **1. User Context**
