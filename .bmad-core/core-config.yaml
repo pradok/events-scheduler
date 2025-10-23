@@ -14,7 +14,9 @@ architecture:
   architectureShardedLocation: docs/architecture
 customTechnicalDocuments: null
 devLoadAlwaysFiles:
+  - docs/architecture/bounded-contexts.md
   - docs/architecture/coding-standards.md
+  - src/domain/schemas/README.md
   - docs/architecture/tech-stack.md
   - docs/architecture/source-tree.md
   - docs/architecture/port-interfaces.md
