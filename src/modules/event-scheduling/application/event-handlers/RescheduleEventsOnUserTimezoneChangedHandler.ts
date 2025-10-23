@@ -1,25 +1,25 @@
 import { UserTimezoneChangedEvent } from '../../../user/domain/events/UserTimezoneChanged';
-import { IEventRepository } from '../ports/IEventRepository';
-import { TimezoneService } from '../../domain/services/TimezoneService';
-import { EventStatus } from '../../domain/value-objects/EventStatus';
-import { Timezone } from '../../../../shared/value-objects/Timezone';
+import { RescheduleEventsOnTimezoneChangeUseCase } from '../use-cases/RescheduleEventsOnTimezoneChangeUseCase';
 
 /**
  * Event handler that reacts to UserTimezoneChanged domain events and reschedules events.
  *
- * This handler decouples User Context from Event Scheduling Context by using domain events.
- * When a user's timezone is updated, this handler recalculates UTC times for PENDING events
- * while maintaining the same local time (9:00 AM).
+ * This is a **thin adapter** that translates domain events into use case calls.
+ * All orchestration logic lives in RescheduleEventsOnTimezoneChangeUseCase.
+ *
+ * **Architecture Pattern:** Thin Event Handler + Use Case
+ * - Handler: Adapts domain event to DTO and delegates to use case
+ * - Use Case: Contains all orchestration logic (reusable, testable)
  *
  * **Bounded Context:** Event Scheduling Context
- * **Layer:** Application (orchestrates domain logic)
- * **Dependencies:** Only Event Scheduling Context services and ports
+ * **Layer:** Application (event adapter)
  *
- * **Business Rule:** Only PENDING events are rescheduled. Events with status
- * PROCESSING, COMPLETED, or FAILED are never modified (they are historical records).
+ * This handler decouples User Context from Event Scheduling Context by using domain events.
+ * When a user's timezone is updated, this handler triggers the RescheduleEventsOnTimezoneChangeUseCase
+ * which recalculates UTC times for PENDING events while maintaining the same local time (9:00 AM).
  *
- * **Key Behavior:** When timezone changes, targetTimestampLocal stays the same (9:00 AM),
- * but targetTimestampUTC is recalculated using the new timezone.
+ * @see RescheduleEventsOnTimezoneChangeUseCase for business logic
+ * @see docs/architecture/event-handlers-vs-use-cases.md for architecture rationale
  *
  * @example
  * ```typescript
@@ -31,60 +31,21 @@ import { Timezone } from '../../../../shared/value-objects/Timezone';
  */
 export class RescheduleEventsOnUserTimezoneChangedHandler {
   public constructor(
-    private readonly eventRepository: IEventRepository,
-    private readonly timezoneService: TimezoneService
+    private readonly rescheduleEventsOnTimezoneChangeUseCase: RescheduleEventsOnTimezoneChangeUseCase
   ) {}
 
   /**
-   * Handle UserTimezoneChanged event by recalculating UTC times for PENDING events.
-   *
-   * Process:
-   * 1. Query all events for the user
-   * 2. Filter to PENDING events only (all types)
-   * 3. For each PENDING event:
-   *    a. Keep targetTimestampLocal unchanged (9:00 AM)
-   *    b. Recalculate targetTimestampUTC using new timezone
-   *    c. Reschedule event (immutable update with version increment)
-   *    d. Persist via eventRepository.update()
+   * Handle UserTimezoneChanged event by delegating to use case
    *
    * @param event - UserTimezoneChanged domain event
    */
   public async handle(event: UserTimezoneChangedEvent): Promise<void> {
     try {
-      // Step 1: Query all events for user
-      const allEvents = await this.eventRepository.findByUserId(event.userId);
-
-      // Step 2: Filter to PENDING events only (all event types)
-      const pendingEvents = allEvents.filter((e) => e.status === EventStatus.PENDING);
-
-      if (pendingEvents.length === 0) {
-        return; // No events to reschedule
-      }
-
-      // Step 3: Validate new timezone
-      const newTimezone = new Timezone(event.newTimezone);
-
-      // Step 4: Reschedule each PENDING event
-      for (const existingEvent of pendingEvents) {
-        // Keep local time unchanged (e.g., 9:00 AM)
-        const targetTimestampLocal = existingEvent.targetTimestampLocal;
-
-        // Recalculate UTC time using new timezone
-        const newTargetTimestampUTC = this.timezoneService.convertToUTC(
-          targetTimestampLocal,
-          newTimezone
-        );
-
-        // Reschedule event (immutable update with version increment)
-        const rescheduledEvent = existingEvent.reschedule(
-          newTargetTimestampUTC,
-          targetTimestampLocal,
-          event.newTimezone
-        );
-
-        // Persist updated event
-        await this.eventRepository.update(rescheduledEvent);
-      }
+      // Delegate to use case (thin adapter pattern)
+      await this.rescheduleEventsOnTimezoneChangeUseCase.execute({
+        userId: event.userId,
+        newTimezone: event.newTimezone,
+      });
     } catch (error) {
       // Log error with event context for debugging
       console.error('Failed to reschedule events from UserTimezoneChanged event', {

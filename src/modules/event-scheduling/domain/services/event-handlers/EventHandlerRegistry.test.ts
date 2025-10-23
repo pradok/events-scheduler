@@ -1,6 +1,6 @@
 import { EventHandlerRegistry, UnsupportedEventTypeError } from './EventHandlerRegistry';
 import { IEventHandler } from './IEventHandler';
-import { User } from '@modules/user/domain/entities/User';
+import { UserInfo } from '../../../application/types/UserInfo';
 import { Event } from '../../entities/Event';
 import { DateTime } from 'luxon';
 
@@ -8,15 +8,15 @@ import { DateTime } from 'luxon';
 class MockEventHandler implements IEventHandler {
   public constructor(public readonly eventType: string) {}
 
-  public calculateNextOccurrence(_user: User, _referenceDate?: DateTime): DateTime {
+  public calculateNextOccurrence(_userInfo: UserInfo, _referenceDate?: DateTime): DateTime {
     return DateTime.now().plus({ days: 1 });
   }
 
-  public formatMessage(user: User): string {
-    return `Mock message for ${user.firstName}`;
+  public formatMessage(userInfo: UserInfo): string {
+    return `Mock message for ${userInfo.firstName}`;
   }
 
-  public generateEvent(_user: User): Event {
+  public generateEvent(_userInfo: UserInfo): Event {
     throw new Error('Not implemented in mock');
   }
 }

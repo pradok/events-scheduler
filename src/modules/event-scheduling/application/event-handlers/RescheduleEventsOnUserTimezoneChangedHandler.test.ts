@@ -4,6 +4,7 @@ import { RescheduleEventsOnUserTimezoneChangedHandler } from './RescheduleEvents
 import { UserTimezoneChangedEvent } from '../../../user/domain/events/UserTimezoneChanged';
 import { IEventRepository } from '../ports/IEventRepository';
 import { TimezoneService } from '../../domain/services/TimezoneService';
+import { RescheduleEventsOnTimezoneChangeUseCase } from '../use-cases/RescheduleEventsOnTimezoneChangeUseCase';
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
@@ -12,6 +13,7 @@ describe('RescheduleEventsOnUserTimezoneChangedHandler', () => {
   let handler: RescheduleEventsOnUserTimezoneChangedHandler;
   let mockEventRepository: jest.Mocked<IEventRepository>;
   let timezoneService: TimezoneService;
+  let rescheduleEventsOnTimezoneChangeUseCase: RescheduleEventsOnTimezoneChangeUseCase;
 
   beforeEach(() => {
     // Mock event repository
@@ -27,10 +29,15 @@ describe('RescheduleEventsOnUserTimezoneChangedHandler', () => {
     // Real timezone service
     timezoneService = new TimezoneService();
 
-    // Create handler
-    handler = new RescheduleEventsOnUserTimezoneChangedHandler(
+    // Create use case
+    rescheduleEventsOnTimezoneChangeUseCase = new RescheduleEventsOnTimezoneChangeUseCase(
       mockEventRepository,
       timezoneService
+    );
+
+    // Create handler (thin adapter)
+    handler = new RescheduleEventsOnUserTimezoneChangedHandler(
+      rescheduleEventsOnTimezoneChangeUseCase
     );
   });
 

@@ -1,18 +1,29 @@
 import { DateTime } from 'luxon';
 import { BirthdayEventHandler } from './BirthdayEventHandler';
-import { TimezoneService } from '../TimezoneService';
 import { User } from '@modules/user/domain/entities/User';
 import { DateOfBirth } from '@modules/user/domain/value-objects/DateOfBirth';
 import { Timezone } from '@shared/value-objects/Timezone';
-import { EventStatus } from '../../value-objects/EventStatus';
+import { UserInfo } from '../../../application/types/UserInfo';
+
+/**
+ * Helper to convert User entity to UserInfo (plain object)
+ * This maintains bounded context separation in tests - handlers should only use UserInfo
+ */
+function toUserInfo(user: User): UserInfo {
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    dateOfBirth: user.dateOfBirth.toString(),
+    timezone: user.timezone.toString(),
+  };
+}
 
 describe('BirthdayEventHandler', () => {
   let handler: BirthdayEventHandler;
-  let timezoneService: TimezoneService;
 
   beforeEach(() => {
-    timezoneService = new TimezoneService();
-    handler = new BirthdayEventHandler(timezoneService);
+    handler = new BirthdayEventHandler();
   });
 
   describe('eventType', () => {
@@ -40,7 +51,7 @@ describe('BirthdayEventHandler', () => {
         });
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2025-03-15');
@@ -66,7 +77,7 @@ describe('BirthdayEventHandler', () => {
         });
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2025-06-20');
@@ -91,7 +102,7 @@ describe('BirthdayEventHandler', () => {
         });
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2025-11-05');
@@ -115,7 +126,7 @@ describe('BirthdayEventHandler', () => {
         });
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2025-09-12');
@@ -141,7 +152,7 @@ describe('BirthdayEventHandler', () => {
         }); // 2024 is a leap year
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2024-02-29');
@@ -165,7 +176,7 @@ describe('BirthdayEventHandler', () => {
         }); // 2025 is NOT a leap year
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert - Should use Feb 28, NOT March 1
         expect(nextBirthday.toISODate()).toBe('2025-02-28');
@@ -200,7 +211,7 @@ describe('BirthdayEventHandler', () => {
         );
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert - Should return next year since current moment <= reference
         expect(nextBirthday.toISODate()).toBe('2026-03-15');
@@ -232,7 +243,7 @@ describe('BirthdayEventHandler', () => {
         );
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2025-03-15');
@@ -264,7 +275,7 @@ describe('BirthdayEventHandler', () => {
         );
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user, referenceDate);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user), referenceDate);
 
         // Assert
         expect(nextBirthday.toISODate()).toBe('2026-03-15');
@@ -286,7 +297,7 @@ describe('BirthdayEventHandler', () => {
         });
 
         // Act
-        const nextBirthday = handler.calculateNextOccurrence(user);
+        const nextBirthday = handler.calculateNextOccurrence(toUserInfo(user));
 
         // Assert
         expect(nextBirthday).toBeDefined();
@@ -313,7 +324,7 @@ describe('BirthdayEventHandler', () => {
       });
 
       // Act
-      const message = handler.formatMessage(user);
+      const message = handler.formatMessage(toUserInfo(user));
 
       // Assert
       expect(message).toBe("Hey, John Doe it's your birthday");
@@ -332,130 +343,32 @@ describe('BirthdayEventHandler', () => {
       });
 
       // Act
-      const message = handler.formatMessage(user);
+      const message = handler.formatMessage(toUserInfo(user));
 
       // Assert
       expect(message).toBe("Hey, Jane Smith it's your birthday");
     });
   });
 
-  describe('generateEvent', () => {
-    it('should generate a complete birthday Event entity', () => {
-      // Arrange
-      const user = new User({
-        id: 'user-123',
-        firstName: 'John',
-        lastName: 'Doe',
-        dateOfBirth: new DateOfBirth('1990-03-15'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      // Act
-      const event = handler.generateEvent(user);
-
-      // Assert - Event structure
-      expect(event).toBeDefined();
-      expect(event.userId).toBe('user-123');
-      expect(event.eventType).toBe('BIRTHDAY');
-      expect(event.status).toBe(EventStatus.PENDING);
-
-      // Assert - Timestamps
-      expect(event.targetTimestampLocal.hour).toBe(9);
-      expect(event.targetTimestampLocal.minute).toBe(0);
-      expect(event.targetTimestampLocal.zoneName).toBe('America/New_York');
-
-      // Assert - UTC conversion
-      expect(event.targetTimestampUTC.zoneName).toBe('UTC');
-
-      // Assert - Payload contains message
-      expect(event.deliveryPayload.message).toBe("Hey, John Doe it's your birthday");
-      expect(event.deliveryPayload.firstName).toBe('John');
-      expect(event.deliveryPayload.lastName).toBe('Doe');
-
-      // Assert - Idempotency key
-      expect(event.idempotencyKey).toBeDefined();
-      expect(event.idempotencyKey.toString()).toBeDefined();
-      expect(typeof event.idempotencyKey.toString()).toBe('string');
-
-      // Assert - Versioning
-      expect(event.version).toBe(1);
-      expect(event.retryCount).toBe(0);
-    });
-
-    it('should generate event with future target timestamp', () => {
-      // Arrange
-      const user = new User({
-        id: 'user-1',
-        firstName: 'Test',
-        lastName: 'User',
-        dateOfBirth: new DateOfBirth('1990-01-01'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      // Act
-      const event = handler.generateEvent(user);
-
-      // Assert - Target timestamp should be in the future
-      expect(event.targetTimestampUTC > DateTime.now()).toBe(true);
-    });
-
-    it('should generate event with correct UTC conversion during DST', () => {
-      // Arrange - User in New York timezone
-      const user = new User({
-        id: 'user-1',
-        firstName: 'Summer',
-        lastName: 'Birthday',
-        dateOfBirth: new DateOfBirth('1990-07-15'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      // Act
-      const event = handler.generateEvent(user);
-
-      // Assert - July is EDT (UTC-4), so 9 AM EDT = 1 PM UTC
-      if (event.targetTimestampLocal.month === 7) {
-        expect(event.targetTimestampLocal.hour).toBe(9);
-        expect(event.targetTimestampUTC.hour).toBe(13); // 9 AM EDT = 1 PM UTC
-      }
-    });
-
-    it('should generate event with leap year birthday handling', () => {
-      // Arrange
-      const user = new User({
-        id: 'user-1',
-        firstName: 'Leap',
-        lastName: 'Year',
-        dateOfBirth: new DateOfBirth('2000-02-29'),
-        timezone: new Timezone('America/New_York'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      });
-
-      // Act
-      const event = handler.generateEvent(user);
-
-      // Assert - Should handle Feb 29 correctly
-      expect(event.targetTimestampLocal.month).toBe(2);
-      // Day will be 28 or 29 depending on leap year
-      expect([28, 29]).toContain(event.targetTimestampLocal.day);
-      expect(event.targetTimestampLocal.hour).toBe(9);
-    });
-  });
-
   describe('Domain Layer Purity', () => {
     it('should have no infrastructure dependencies', () => {
-      // Arrange & Act
-      const newHandler = new BirthdayEventHandler(new TimezoneService());
+      // Arrange & Act - BirthdayEventHandler should be pure domain logic
+      const newHandler = new BirthdayEventHandler();
 
       // Assert
       expect(newHandler).toBeInstanceOf(BirthdayEventHandler);
       expect(newHandler.eventType).toBe('BIRTHDAY');
+    });
+
+    it('should only contain domain logic methods', () => {
+      // Assert - Handler should only have domain logic methods
+      expect(typeof handler.calculateNextOccurrence).toBe('function');
+      expect(typeof handler.formatMessage).toBe('function');
+
+      // Orchestration methods (generateEvent) should NOT exist
+      // Event entity creation belongs in use cases
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+      expect((handler as any).generateEvent).toBeUndefined();
     });
   });
 });

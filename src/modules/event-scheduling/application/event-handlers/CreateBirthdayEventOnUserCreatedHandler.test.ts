@@ -7,9 +7,11 @@ import { EventHandlerRegistry } from '../../domain/services/event-handlers/Event
 import { BirthdayEventHandler } from '../../domain/services/event-handlers/BirthdayEventHandler';
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
+import { CreateBirthdayEventUseCase } from '../use-cases/CreateBirthdayEventUseCase';
 
 describe('CreateBirthdayEventOnUserCreatedHandler', () => {
   let handler: CreateBirthdayEventOnUserCreatedHandler;
+  let createBirthdayEventUseCase: CreateBirthdayEventUseCase;
   let mockEventRepository: jest.Mocked<IEventRepository>;
   let timezoneService: TimezoneService;
   let eventHandlerRegistry: EventHandlerRegistry;
@@ -28,14 +30,17 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
     // Real timezone service and registry
     timezoneService = new TimezoneService();
     eventHandlerRegistry = new EventHandlerRegistry();
-    eventHandlerRegistry.register(new BirthdayEventHandler(timezoneService));
+    eventHandlerRegistry.register(new BirthdayEventHandler());
 
-    // Create handler
-    handler = new CreateBirthdayEventOnUserCreatedHandler(
+    // Create use case
+    createBirthdayEventUseCase = new CreateBirthdayEventUseCase(
       mockEventRepository,
       timezoneService,
       eventHandlerRegistry
     );
+
+    // Create handler (thin adapter)
+    handler = new CreateBirthdayEventOnUserCreatedHandler(createBirthdayEventUseCase);
   });
 
   function createUserCreatedEvent(overrides: Partial<UserCreatedEvent> = {}): UserCreatedEvent {

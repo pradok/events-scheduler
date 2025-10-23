@@ -1,37 +1,47 @@
 import { DateTime } from 'luxon';
 import { IEventHandler } from './IEventHandler';
-import { User } from '@modules/user/domain/entities/User';
-import { Event } from '../../entities/Event';
-import { EventStatus } from '../../value-objects/EventStatus';
-import { IdempotencyKey } from '../../value-objects/IdempotencyKey';
-import { TimezoneService } from '../TimezoneService';
+import { UserInfo } from '../../../application/types/UserInfo';
 
 /**
- * BirthdayEventHandler - Strategy implementation for birthday events
+ * BirthdayEventHandler - Strategy implementation for birthday-specific domain logic
  *
- * Handles birthday-specific logic:
- * - Calculates next birthday at 9:00 AM local time
- * - Formats birthday message
- * - Generates birthday Event entities
+ * Handles birthday-specific domain rules:
+ * - Calculates when next birthday occurs (9:00 AM local time)
+ * - Formats birthday message content
  *
  * This is a concrete strategy in the Strategy Pattern, allowing the system
  * to support birthdays without hardcoding birthday logic in core components.
+ *
+ * **Bounded Context Compliance:**
+ * Uses UserInfo interface (primitives) instead of User entity to maintain
+ * proper separation from User bounded context.
+ *
+ * **Design Decision:**
+ * This class contains ONLY domain logic (calculations, formatting).
+ * Event entity creation/orchestration is handled by CreateBirthdayEventUseCase.
+ * Timezone conversions are handled by TimezoneService in the use case layer.
+ * See: event-handlers-vs-use-cases.md for rationale.
  */
 export class BirthdayEventHandler implements IEventHandler {
   public readonly eventType = 'BIRTHDAY';
 
-  public constructor(private readonly timezoneService: TimezoneService) {}
-
   /**
    * Calculate the next birthday occurrence at 9:00 AM local time
    *
-   * @param user - The user whose birthday to calculate
+   * @param userInfo - User data (dateOfBirth in ISO format, timezone in IANA format)
    * @param referenceDate - The reference date (defaults to now)
    * @returns DateTime representing next birthday at 9:00 AM in user's timezone
    */
-  public calculateNextOccurrence(user: User, referenceDate: DateTime = DateTime.now()): DateTime {
-    const { month, day } = user.dateOfBirth.getMonthDay();
-    const refInZone = referenceDate.setZone(user.timezone.toString());
+  public calculateNextOccurrence(
+    userInfo: UserInfo,
+    referenceDate: DateTime = DateTime.now()
+  ): DateTime {
+    // Parse dateOfBirth from ISO string (YYYY-MM-DD)
+    const dob = DateTime.fromISO(userInfo.dateOfBirth);
+    const month = dob.month;
+    const day = dob.day;
+
+    const refInZone = referenceDate.setZone(userInfo.timezone);
     const currentYear = refInZone.year;
 
     // Check if this is a leap year birthday (Feb 29)
@@ -63,46 +73,11 @@ export class BirthdayEventHandler implements IEventHandler {
   /**
    * Format the birthday message
    *
-   * @param user - The user whose birthday to celebrate
+   * @param userInfo - User data (firstName, lastName)
    * @returns Formatted birthday message
    */
-  public formatMessage(user: User): string {
-    return `Hey, ${user.firstName} ${user.lastName} it's your birthday`;
-  }
-
-  /**
-   * Generate a complete birthday Event entity
-   *
-   * @param user - The user for whom to generate the birthday event
-   * @returns Event entity ready to be persisted
-   */
-  public generateEvent(user: User): Event {
-    const nextBirthday = this.calculateNextOccurrence(user);
-    const targetUTC = this.timezoneService.convertToUTC(nextBirthday, user.timezone);
-
-    const idempotencyKey = IdempotencyKey.generate(user.id, targetUTC);
-
-    return new Event({
-      id: idempotencyKey.toString(), // Use idempotency key as event ID
-      userId: user.id,
-      eventType: this.eventType,
-      status: EventStatus.PENDING,
-      targetTimestampUTC: targetUTC,
-      targetTimestampLocal: nextBirthday,
-      targetTimezone: user.timezone.toString(),
-      deliveryPayload: {
-        message: this.formatMessage(user),
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      idempotencyKey,
-      version: 1,
-      retryCount: 0,
-      executedAt: null,
-      failureReason: null,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    });
+  public formatMessage(userInfo: UserInfo): string {
+    return `Hey, ${userInfo.firstName} ${userInfo.lastName} it's your birthday`;
   }
 
   /**

@@ -8,6 +8,9 @@ import { RescheduleEventsOnUserBirthdayChangedHandler } from '../../modules/even
 import { RescheduleEventsOnUserTimezoneChangedHandler } from '../../modules/event-scheduling/application/event-handlers/RescheduleEventsOnUserTimezoneChangedHandler';
 import { DeleteEventsOnUserDeletedHandler } from '../../modules/event-scheduling/application/event-handlers/DeleteEventsOnUserDeletedHandler';
 import { CreateBirthdayEventOnUserCreatedHandler } from '../../modules/event-scheduling/application/event-handlers/CreateBirthdayEventOnUserCreatedHandler';
+import { CreateBirthdayEventUseCase } from '../../modules/event-scheduling/application/use-cases/CreateBirthdayEventUseCase';
+import { RescheduleBirthdayEventsUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleBirthdayEventsUseCase';
+import { RescheduleEventsOnTimezoneChangeUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleEventsOnTimezoneChangeUseCase';
 
 /**
  * Factory function to create and configure the event bus with all handlers
@@ -22,34 +25,45 @@ export function createEventBus(prisma: PrismaClient): InMemoryEventBus {
   const eventRepository = new PrismaEventRepository(prisma);
   const timezoneService = new TimezoneService();
   const eventHandlerRegistry = new EventHandlerRegistry();
-  eventHandlerRegistry.register(new BirthdayEventHandler(timezoneService));
+  eventHandlerRegistry.register(new BirthdayEventHandler());
 
-  // Register UserCreated handler
-  const userCreatedHandler = new CreateBirthdayEventOnUserCreatedHandler(
+  // Create use cases
+  const createBirthdayEventUseCase = new CreateBirthdayEventUseCase(
     eventRepository,
     timezoneService,
     eventHandlerRegistry
+  );
+  const rescheduleBirthdayEventsUseCase = new RescheduleBirthdayEventsUseCase(
+    eventRepository,
+    timezoneService,
+    eventHandlerRegistry
+  );
+  const rescheduleEventsOnTimezoneChangeUseCase = new RescheduleEventsOnTimezoneChangeUseCase(
+    eventRepository,
+    timezoneService
+  );
+
+  // Register UserCreated handler (thin adapter)
+  const userCreatedHandler = new CreateBirthdayEventOnUserCreatedHandler(
+    createBirthdayEventUseCase
   );
   eventBus.subscribe('UserCreated', (event) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
     userCreatedHandler.handle(event as any)
   );
 
-  // Register UserBirthdayChanged handler
+  // Register UserBirthdayChanged handler (thin adapter)
   const birthdayChangedHandler = new RescheduleEventsOnUserBirthdayChangedHandler(
-    eventRepository,
-    timezoneService,
-    eventHandlerRegistry
+    rescheduleBirthdayEventsUseCase
   );
   eventBus.subscribe('UserBirthdayChanged', (event) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
     birthdayChangedHandler.handle(event as any)
   );
 
-  // Register UserTimezoneChanged handler
+  // Register UserTimezoneChanged handler (thin adapter)
   const timezoneChangedHandler = new RescheduleEventsOnUserTimezoneChangedHandler(
-    eventRepository,
-    timezoneService
+    rescheduleEventsOnTimezoneChangeUseCase
   );
   eventBus.subscribe('UserTimezoneChanged', (event) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument

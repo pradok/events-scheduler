@@ -9,9 +9,11 @@ import { BirthdayEventHandler } from '../../domain/services/event-handlers/Birth
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
+import { RescheduleBirthdayEventsUseCase } from '../use-cases/RescheduleBirthdayEventsUseCase';
 
 describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
   let handler: RescheduleEventsOnUserBirthdayChangedHandler;
+  let rescheduleBirthdayEventsUseCase: RescheduleBirthdayEventsUseCase;
   let mockEventRepository: jest.Mocked<IEventRepository>;
   let timezoneService: TimezoneService;
   let eventHandlerRegistry: EventHandlerRegistry;
@@ -30,14 +32,17 @@ describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
     // Real timezone service and registry
     timezoneService = new TimezoneService();
     eventHandlerRegistry = new EventHandlerRegistry();
-    eventHandlerRegistry.register(new BirthdayEventHandler(timezoneService));
+    eventHandlerRegistry.register(new BirthdayEventHandler());
 
-    // Create handler
-    handler = new RescheduleEventsOnUserBirthdayChangedHandler(
+    // Create use case
+    rescheduleBirthdayEventsUseCase = new RescheduleBirthdayEventsUseCase(
       mockEventRepository,
       timezoneService,
       eventHandlerRegistry
     );
+
+    // Create handler (thin adapter)
+    handler = new RescheduleEventsOnUserBirthdayChangedHandler(rescheduleBirthdayEventsUseCase);
   });
 
   function createUserBirthdayChangedEvent(

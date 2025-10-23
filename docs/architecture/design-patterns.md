@@ -21,6 +21,10 @@ The architecture implements 8 design patterns to ensure clean separation of conc
 
 All patterns follow **Domain-Driven Design** principles with zero infrastructure dependencies in domain layer.
 
+**Related Documentation:**
+
+- [Event Handlers vs Use Cases](./event-handlers-vs-use-cases.md) - Architectural pattern for thin event handlers delegating to reusable use cases
+
 ---
 
 ## 1. Strategy Pattern - Event Type Handlers
