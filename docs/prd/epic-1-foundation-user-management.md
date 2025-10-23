@@ -1,10 +1,10 @@
 # Epic 1: Foundation & User Management
 
-**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events via domain events. This epic proves the core domain model works correctly, validates timezone conversion logic early, and implements bounded contexts for future scalability.
+**Epic Goal:** Establish the foundational project infrastructure (monorepo setup, TypeScript configuration, Docker environment, PostgreSQL database) while delivering the first piece of business value: a working REST API for user management that automatically generates timezone-aware birthday events via domain events. This epic proves the core domain model works correctly, validates timezone conversion logic early, and implements bounded contexts with physical folder separation for future scalability.
 
-**Story Count:** 11 stories (Originally 8, added 3 for bounded contexts architecture)
-**New Stories:** 1.8 (Domain Event Bus), 1.9 (UserCreated Event Handler), 1.10 (Refactored CreateUserUseCase)
-**Architecture Decision:** Implemented bounded contexts with domain events to decouple User Context from Event Scheduling Context. See [Bounded Contexts Architecture](../architecture/bounded-contexts.md) and [Scalability Analysis](../architecture/scalability-analysis.md) for rationale.
+**Story Count:** 12 stories (Originally 8, added 4 for bounded contexts architecture)
+**New Stories:** 1.7b (Folder Reorganization), 1.8 (Domain Event Bus), 1.9 (UserCreated Event Handler), 1.10 (Refactored CreateUserUseCase)
+**Architecture Decision:** Implemented bounded contexts with domain events to decouple User Context from Event Scheduling Context. Physical folder reorganization (Story 1.7b) enforces context boundaries at filesystem level. See [Bounded Contexts Architecture](../architecture/bounded-contexts.md) and [Scalability Analysis](../architecture/scalability-analysis.md) for rationale.
 
 ---
 
@@ -141,6 +141,33 @@
 6. EventRepository includes optimistic locking using version field
 7. Integration tests use Testcontainers 10.5.0 for real PostgreSQL testing
 8. Integration tests achieve 100% coverage for repository methods
+
+---
+
+## Story 1.7b: Reorganize to Bounded Context Folder Structure
+
+**As a** developer,
+**I want** the codebase organized by bounded contexts (User, Event Scheduling),
+**so that** context boundaries are physically enforced and the codebase is ready for future microservice extraction.
+
+**Acceptance Criteria:**
+
+1. New folder structure created: `src/modules/user/`, `src/modules/event-scheduling/`, `src/shared/`
+2. All User Context files moved to `src/modules/user/` with domain, application, adapters layers
+3. All Event Scheduling Context files moved to `src/modules/event-scheduling/` with domain, application, adapters layers
+4. Shared files (Timezone value object, validation schemas) moved to `src/shared/`
+5. TypeScript path aliases configured in `tsconfig.json` (`@modules/*`, `@shared/*`)
+6. All import paths updated across codebase (relative within modules, path aliases across modules)
+7. All existing tests pass with 0 failures after reorganization
+8. ESLint and TypeScript compilation succeed with 0 errors
+9. Git history preserved (used `git mv` for all file moves)
+10. Documentation updated to reflect new folder structure
+
+**Architecture Context:** This story physically separates bounded contexts at the filesystem level, enforcing architectural boundaries and preparing for future microservice extraction. Each `src/modules/*` folder can become a separate repository when scaling to Phase 2 (10K-100K users).
+
+**Design Decision:** User requested early reorganization: "I rather reorganise now than later which will be very hard." At 53 TypeScript files, reorganization is low-risk; postponing until 200+ files increases merge conflict risk.
+
+**See:** [Story 1.7b Details](../stories/1.7b.reorganize-bounded-context-folder-structure.md) | [Bounded Contexts - Folder Structure](../architecture/bounded-contexts.md#folder-structure-logical-vs-physical-separation)
 
 ---
 
