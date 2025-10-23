@@ -15,7 +15,7 @@ export class TimezoneService {
   /**
    * Converts a local timestamp to UTC
    *
-   * @param localTimestamp - The DateTime in any timezone
+   * @param localTimestamp - The DateTime representing a "wall clock" time (timezone-agnostic)
    * @param timezone - The IANA timezone identifier to interpret the timestamp in
    * @returns DateTime in UTC timezone
    *
@@ -23,15 +23,30 @@ export class TimezoneService {
    *
    * @remarks
    * - Handles DST transitions automatically via Luxon
-   * - Preserves the exact moment in time, just changes the timezone representation
+   * - Treats localTimestamp as a "floating" time (9AM) and interprets it in the given timezone
+   * - Example: 9AM interpreted in America/New_York becomes 14:00 UTC (during EST)
    */
   public convertToUTC(localTimestamp: DateTime, timezone: Timezone): DateTime {
     if (!localTimestamp.isValid) {
       throw new Error(`Invalid timestamp provided: ${localTimestamp.invalidReason}`);
     }
 
-    // Set the timestamp to the specified timezone, then convert to UTC
-    return localTimestamp.setZone(timezone.toString()).toUTC();
+    // Extract the "wall clock" time components (year, month, day, hour, minute, second)
+    // and reconstruct them in the target timezone, then convert to UTC
+    const reconstructed = DateTime.fromObject(
+      {
+        year: localTimestamp.year,
+        month: localTimestamp.month,
+        day: localTimestamp.day,
+        hour: localTimestamp.hour,
+        minute: localTimestamp.minute,
+        second: localTimestamp.second,
+        millisecond: localTimestamp.millisecond,
+      },
+      { zone: timezone.toString() }
+    );
+
+    return reconstructed.toUTC();
   }
 
   /**

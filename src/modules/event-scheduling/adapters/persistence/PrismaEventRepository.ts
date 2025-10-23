@@ -73,6 +73,9 @@ export class PrismaEventRepository implements IEventRepository {
         },
         data: {
           status: prismaData.status,
+          targetTimestampUTC: prismaData.targetTimestampUTC,
+          targetTimestampLocal: prismaData.targetTimestampLocal,
+          targetTimezone: prismaData.targetTimezone,
           executedAt: prismaData.executedAt,
           failureReason: prismaData.failureReason,
           retryCount: prismaData.retryCount,
@@ -190,6 +193,27 @@ export class PrismaEventRepository implements IEventRepository {
           updatedAt: e.updated_at,
         })
       );
+    });
+  }
+
+  /**
+   * Deletes all events for a specific user (cascade delete)
+   *
+   * This method is used by DeleteUserUseCase to ensure referential integrity
+   * when a user is removed from the system.
+   *
+   * All events (PENDING, PROCESSING, COMPLETED, FAILED) are deleted.
+   *
+   * **Transaction Requirement:**
+   * This method should be called within a transaction that also deletes the user,
+   * to ensure atomic cascade deletion.
+   *
+   * @param userId - UUID of the user whose events should be deleted
+   * @returns Promise that resolves when all events are deleted
+   */
+  public async deleteByUserId(userId: string): Promise<void> {
+    await this.prisma.event.deleteMany({
+      where: { userId },
     });
   }
 }

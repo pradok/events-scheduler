@@ -32,17 +32,19 @@ export function eventToDomain(prismaEvent: PrismaEvent): Event {
     userId: prismaEvent.userId,
     eventType: prismaEvent.eventType,
     status,
-    targetTimestampUTC: DateTime.fromJSDate(prismaEvent.targetTimestampUTC),
-    targetTimestampLocal: DateTime.fromJSDate(prismaEvent.targetTimestampLocal),
+    targetTimestampUTC: DateTime.fromJSDate(prismaEvent.targetTimestampUTC, { zone: 'utc' }),
+    targetTimestampLocal: DateTime.fromJSDate(prismaEvent.targetTimestampLocal, { zone: 'utc' }),
     targetTimezone: prismaEvent.targetTimezone,
-    executedAt: prismaEvent.executedAt ? DateTime.fromJSDate(prismaEvent.executedAt) : null,
+    executedAt: prismaEvent.executedAt
+      ? DateTime.fromJSDate(prismaEvent.executedAt, { zone: 'utc' })
+      : null,
     failureReason: prismaEvent.failureReason,
     retryCount: prismaEvent.retryCount,
     version: prismaEvent.version,
     idempotencyKey,
     deliveryPayload: jsonValueToRecord(prismaEvent.deliveryPayload),
-    createdAt: DateTime.fromJSDate(prismaEvent.createdAt),
-    updatedAt: DateTime.fromJSDate(prismaEvent.updatedAt),
+    createdAt: DateTime.fromJSDate(prismaEvent.createdAt, { zone: 'utc' }),
+    updatedAt: DateTime.fromJSDate(prismaEvent.updatedAt, { zone: 'utc' }),
   });
 }
 

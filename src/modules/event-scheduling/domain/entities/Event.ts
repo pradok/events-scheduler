@@ -100,4 +100,40 @@ export class Event {
   public canRetry(): boolean {
     return this.retryCount < 3 && this.status === EventStatus.FAILED;
   }
+
+  /**
+   * Reschedules the event to a new target timestamp (immutable - returns new instance)
+   *
+   * This method is used when a user changes their birthday or timezone,
+   * requiring PENDING events to be rescheduled.
+   *
+   * **Business Rule:** Only PENDING events can be rescheduled.
+   * PROCESSING, COMPLETED, and FAILED events are historical records and must not be modified.
+   *
+   * @param newTargetTimestampUTC - New target timestamp in UTC
+   * @param newTargetTimestampLocal - New target timestamp in user's local time
+   * @param newTargetTimezone - New timezone identifier (IANA format)
+   * @returns A new Event instance with updated timestamps
+   * @throws Error if event status is not PENDING
+   */
+  public reschedule(
+    newTargetTimestampUTC: DateTime,
+    newTargetTimestampLocal: DateTime,
+    newTargetTimezone: string
+  ): Event {
+    if (this.status !== EventStatus.PENDING) {
+      throw new Error(
+        `Cannot reschedule event with status ${this.status}. Only PENDING events can be rescheduled.`
+      );
+    }
+
+    return new Event({
+      ...this,
+      targetTimestampUTC: newTargetTimestampUTC,
+      targetTimestampLocal: newTargetTimestampLocal,
+      targetTimezone: newTargetTimezone,
+      version: this.version + 1,
+      updatedAt: DateTime.now(),
+    });
+  }
 }

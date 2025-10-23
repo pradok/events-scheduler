@@ -86,10 +86,11 @@ module.exports = {
   },
   overrides: [
     {
-      // Allow console in test files
+      // Relaxed rules for test files
       files: ['**/*.test.ts', '**/*.spec.ts'],
       rules: {
         'no-console': 'off',
+        '@typescript-eslint/unbound-method': 'off',
       },
     },
   ],

@@ -68,7 +68,9 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
+    "@fastify/cors": "^9.0.1",
     "@prisma/client": "^6.17.1",
+    "fastify": "^4.26.0",
     "luxon": "^3.4.4",
     "zod": "^4.1.12"
   }

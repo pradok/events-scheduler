@@ -75,4 +75,20 @@ export class User {
       updatedAt: DateTime.now(),
     });
   }
+
+  /**
+   * Updates the user's date of birth (immutable - returns new instance)
+   * @param newDateOfBirth The new date of birth
+   * @returns A new User instance with updated date of birth
+   *
+   * Note: Changing a user's birthday will trigger rescheduling of PENDING birthday events.
+   * This is handled by UpdateUserUseCase, not by this domain method.
+   */
+  public updateDateOfBirth(newDateOfBirth: DateOfBirth): User {
+    return new User({
+      ...this,
+      dateOfBirth: newDateOfBirth,
+      updatedAt: DateTime.now(),
+    });
+  }
 }

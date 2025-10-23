@@ -22,6 +22,7 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
       findByUserId: jest.fn(),
       update: jest.fn(),
       claimReadyEvents: jest.fn(),
+      deleteByUserId: jest.fn(),
     } as jest.Mocked<IEventRepository>;
 
     // Real timezone service and registry

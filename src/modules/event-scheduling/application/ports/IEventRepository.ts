@@ -84,4 +84,19 @@ export interface IEventRepository {
    * @returns Promise resolving to array of claimed Event entities (may be empty if no events ready)
    */
   claimReadyEvents(limit: number): Promise<Event[]>;
+
+  /**
+   * Deletes all events associated with a specific user.
+   *
+   * This method supports cascade deletion when a user is removed from the system.
+   * All events (PENDING, PROCESSING, COMPLETED, FAILED) for the user are deleted.
+   *
+   * **Usage in DeleteUserUseCase:**
+   * This method is called before deleting the user to maintain referential integrity.
+   * It should be wrapped in a transaction with user deletion to ensure atomicity.
+   *
+   * @param userId - The unique user ID (UUID)
+   * @returns Promise that resolves when all events are deleted
+   */
+  deleteByUserId(userId: string): Promise<void>;
 }
