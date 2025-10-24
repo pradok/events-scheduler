@@ -208,3 +208,26 @@
 6. Test verifies event status updated to COMPLETED
 7. Test verifies next year's event was created
 8. Test completes in <30 seconds with all assertions passing
+
+---
+
+## Story 2.11: LocalStack Configuration Simplification
+
+**As a** developer,
+**I want** a simplified LocalStack setup with consistent resource creation,
+**so that** the local development environment is easier to understand and maintain.
+
+**Acceptance Criteria:**
+
+1. Consolidate queue naming - use single consistent queue name throughout project
+2. Remove duplicate queue creation (init script vs tests)
+3. Simplify init-aws.sh to only create static infrastructure (EventBridge rules, IAM roles)
+4. Let tests create their own test-specific resources (queues, Lambda functions) using AWS SDK
+5. Remove deprecated shell scripts (lambda-deploy.sh, lambda-eventbridge.sh)
+6. Keep only Node.js deployment script (deploy-lambda.js) using AWS SDK
+7. Update documentation to reflect simplified approach
+8. Verify all tests still pass with simplified setup
+9. Document LocalStack architecture and best practices in architecture docs
+10. Add troubleshooting guide for common LocalStack issues
+
+**Note:** This is a cleanup/refactoring story to be completed after all feature stories are done.
