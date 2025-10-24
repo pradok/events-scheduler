@@ -340,6 +340,172 @@ describe('Event', () => {
     });
   });
 
+  describe('state machine enforcement - invalid transitions', () => {
+    describe('PENDING state invalid transitions', () => {
+      it('should throw error when attempting PENDING → COMPLETED', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.PENDING,
+        });
+        const executedAt = DateTime.now();
+
+        // Act & Assert
+        expect(() => event.markCompleted(executedAt)).toThrow(InvalidStateTransitionError);
+        expect(() => event.markCompleted(executedAt)).toThrow(
+          'Invalid state transition from PENDING to COMPLETED'
+        );
+      });
+
+      it('should throw error when attempting PENDING → FAILED', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.PENDING,
+        });
+
+        // Act & Assert
+        expect(() => event.markFailed('Some error')).toThrow(InvalidStateTransitionError);
+        expect(() => event.markFailed('Some error')).toThrow(
+          'Invalid state transition from PENDING to FAILED'
+        );
+      });
+    });
+
+    describe('PROCESSING state invalid transitions', () => {
+      it('should throw error when attempting PROCESSING → PROCESSING (double claim)', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.PROCESSING,
+        });
+
+        // Act & Assert
+        expect(() => event.claim()).toThrow(InvalidStateTransitionError);
+        expect(() => event.claim()).toThrow(
+          'Invalid state transition from PROCESSING to PROCESSING'
+        );
+      });
+    });
+
+    describe('COMPLETED state (terminal) - no outbound transitions', () => {
+      it('should throw error when attempting COMPLETED → PROCESSING', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.COMPLETED,
+          executedAt: DateTime.now(),
+        });
+
+        // Act & Assert
+        expect(() => event.claim()).toThrow(InvalidStateTransitionError);
+        expect(() => event.claim()).toThrow(
+          'Invalid state transition from COMPLETED to PROCESSING'
+        );
+      });
+
+      it('should throw error when attempting COMPLETED → FAILED', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.COMPLETED,
+          executedAt: DateTime.now(),
+        });
+
+        // Act & Assert
+        expect(() => event.markFailed('Error')).toThrow(InvalidStateTransitionError);
+        expect(() => event.markFailed('Error')).toThrow(
+          'Invalid state transition from COMPLETED to FAILED'
+        );
+      });
+
+      it('should throw error when attempting COMPLETED → COMPLETED (duplicate complete)', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.COMPLETED,
+          executedAt: DateTime.now(),
+        });
+
+        // Act & Assert
+        expect(() => event.markCompleted(DateTime.now())).toThrow(InvalidStateTransitionError);
+        expect(() => event.markCompleted(DateTime.now())).toThrow(
+          'Invalid state transition from COMPLETED to COMPLETED'
+        );
+      });
+    });
+
+    describe('FAILED state (terminal) - no outbound transitions', () => {
+      it('should throw error when attempting FAILED → PROCESSING', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.FAILED,
+          failureReason: 'Previous error',
+          retryCount: 3,
+        });
+
+        // Act & Assert
+        expect(() => event.claim()).toThrow(InvalidStateTransitionError);
+        expect(() => event.claim()).toThrow('Invalid state transition from FAILED to PROCESSING');
+      });
+
+      it('should throw error when attempting FAILED → COMPLETED', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.FAILED,
+          failureReason: 'Previous error',
+          retryCount: 3,
+        });
+
+        // Act & Assert
+        expect(() => event.markCompleted(DateTime.now())).toThrow(InvalidStateTransitionError);
+        expect(() => event.markCompleted(DateTime.now())).toThrow(
+          'Invalid state transition from FAILED to COMPLETED'
+        );
+      });
+
+      it('should throw error when attempting FAILED → FAILED (duplicate fail)', () => {
+        // Arrange
+        const event = new Event({
+          ...validEventProps,
+          status: EventStatus.FAILED,
+          failureReason: 'Previous error',
+          retryCount: 3,
+        });
+
+        // Act & Assert
+        expect(() => event.markFailed('Another error')).toThrow(InvalidStateTransitionError);
+        expect(() => event.markFailed('Another error')).toThrow(
+          'Invalid state transition from FAILED to FAILED'
+        );
+      });
+    });
+
+    describe('error message clarity', () => {
+      it('should provide clear error messages indicating source and target states', () => {
+        // Arrange
+        const completedEvent = new Event({
+          ...validEventProps,
+          status: EventStatus.COMPLETED,
+          executedAt: DateTime.now(),
+        });
+
+        // Act & Assert
+        try {
+          completedEvent.claim();
+          fail('Should have thrown InvalidStateTransitionError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(InvalidStateTransitionError);
+          expect((error as Error).message).toContain('COMPLETED');
+          expect((error as Error).message).toContain('PROCESSING');
+          expect((error as Error).message).toContain('Invalid state transition');
+        }
+      });
+    });
+  });
+
   describe('idempotency key persistence', () => {
     it('should include idempotency key when event is created', () => {
       // Arrange

@@ -100,6 +100,180 @@ Additionally, we use **Value Objects** (DDD pattern) for type-safe, validated da
 - `canRetry(): boolean` - Returns true if retry count < 3 and status is FAILED
 - `generateIdempotencyKey(): string` - Creates unique key for external API idempotency
 
+### Event State Machine
+
+The Event entity enforces a strict state machine to prevent invalid state transitions and ensure data consistency in distributed systems.
+
+**State Diagram:**
+
+```text
+┌─────────┐
+│ PENDING │ ← Initial state when event is created
+└────┬────┘
+     │ claim()
+     ↓
+┌────────────┐
+│ PROCESSING │ ← Event is being executed by a worker
+└─────┬──────┘
+      │
+      ├─→ markCompleted() → ┌───────────┐
+      │                      │ COMPLETED │ ← Terminal state (success)
+      │                      └───────────┘
+      │
+      └─→ markFailed() ────→ ┌────────┐
+                             │ FAILED │ ← Terminal state (permanent failure)
+                             └────────┘
+```
+
+**Valid Transitions:**
+
+| From State  | To State   | Method               | Description                                  |
+|-------------|------------|----------------------|----------------------------------------------|
+| PENDING     | PROCESSING | `claim()`            | Scheduler claims event for execution         |
+| PROCESSING  | COMPLETED  | `markCompleted()`    | Webhook delivered successfully               |
+| PROCESSING  | FAILED     | `markFailed()`       | Permanent failure (4xx error, max retries)   |
+
+**Invalid Transitions (All throw `InvalidStateTransitionError`):**
+
+| From State  | To State   | Why Invalid                                                     |
+|-------------|------------|-----------------------------------------------------------------|
+| PENDING     | COMPLETED  | Event must be claimed (PROCESSING) before completion            |
+| PENDING     | FAILED     | Event must be claimed (PROCESSING) before marking failed        |
+| PROCESSING  | PROCESSING | Event is already being processed (double claim)                 |
+| COMPLETED   | *any*      | Terminal state - historical record, cannot be modified          |
+| FAILED      | *any*      | Terminal state - historical record, cannot be modified          |
+
+**Rationale for State Machine Rules:**
+
+1. **Why COMPLETED and FAILED are terminal states:**
+   - These represent **historical audit records** of event execution outcomes
+   - Once an event reaches a terminal state, it should **never be modified**
+   - This ensures **immutable audit trail** for compliance and debugging
+   - Terminal states preserve the exact execution timestamp, failure reason, and delivery status
+
+2. **Why PENDING cannot transition directly to COMPLETED or FAILED:**
+   - Events must be **claimed first** (PENDING → PROCESSING) to prevent duplicate processing
+   - The PROCESSING state indicates **"this event is owned by a worker"**
+   - Without claiming, multiple workers could attempt to process the same event simultaneously
+   - Optimistic locking on version field prevents race conditions during claiming
+
+3. **Why concurrent updates are prevented via optimistic locking:**
+   - Multiple scheduler instances may attempt to claim the same event
+   - **Optimistic locking** (via `version` field) detects concurrent modifications
+   - The first worker to update wins; others receive `OptimisticLockError`
+   - This ensures **exactly-once processing** in distributed systems
+
+**Optimistic Locking Mechanism:**
+
+Every state transition increments the `version` field:
+
+```typescript
+// Initial state
+event.version = 1; // PENDING
+
+// After claiming
+const claimedEvent = event.claim();
+claimedEvent.version = 2; // PROCESSING
+
+// After completion
+const completedEvent = claimedEvent.markCompleted(DateTime.now());
+completedEvent.version = 3; // COMPLETED
+```
+
+The repository layer enforces optimistic locking:
+
+```sql
+-- Repository update checks previous version
+UPDATE events
+SET status = 'PROCESSING', version = 2, updated_at = NOW()
+WHERE id = ? AND version = 1; -- Optimistic lock: must match previous version
+
+-- If 0 rows affected → another transaction modified the event → throw OptimisticLockError
+```
+
+**Error Handling Behavior:**
+
+1. **`InvalidStateTransitionError`** (Domain Error):
+   - **Cause:** Attempting an invalid state transition (e.g., COMPLETED → PROCESSING)
+   - **Classification:** Programming bug or race condition
+   - **Handling:** Log error, do not retry, investigate root cause
+   - **Example:** Worker attempts to claim an event that's already COMPLETED
+   - **Prevention:** Proper state checking before calling state transition methods
+
+2. **`OptimisticLockError`** (Infrastructure Error):
+   - **Cause:** Version mismatch during concurrent update (another transaction modified the event)
+   - **Classification:** Expected behavior in distributed systems with multiple workers
+   - **Handling:** Log warning, do not retry (event already claimed/processed by another worker)
+   - **Example:** Two schedulers simultaneously try to claim the same event
+   - **Resolution:** First update succeeds, second fails with version mismatch (correct behavior)
+
+**State Machine Examples:**
+
+**Valid Lifecycle Example 1 - Successful Execution:**
+
+```text
+PENDING (v1) → claim() → PROCESSING (v2) → markCompleted() → COMPLETED (v3)
+```
+
+**Valid Lifecycle Example 2 - Permanent Failure:**
+
+```text
+PENDING (v1) → claim() → PROCESSING (v2) → markFailed("HTTP 404") → FAILED (v3)
+```
+
+**Invalid Transition Example 1 - Skip PROCESSING:**
+
+```typescript
+const event = new Event({ status: EventStatus.PENDING, ... });
+event.markCompleted(DateTime.now()); // ❌ Throws InvalidStateTransitionError
+// Error: "Invalid state transition from PENDING to COMPLETED"
+```
+
+**Invalid Transition Example 2 - Modify Terminal State:**
+
+```typescript
+const event = new Event({ status: EventStatus.COMPLETED, ... });
+event.claim(); // ❌ Throws InvalidStateTransitionError
+// Error: "Invalid state transition from COMPLETED to PROCESSING"
+```
+
+**Concurrent Update Example - Optimistic Locking:**
+
+```typescript
+// Two workers load the same event
+const worker1Event = await repository.findById(eventId); // version = 1
+const worker2Event = await repository.findById(eventId); // version = 1
+
+// Worker 1 claims event first
+await repository.update(worker1Event.claim()); // ✅ Success, version → 2
+
+// Worker 2 attempts to claim (stale version)
+await repository.update(worker2Event.claim()); // ❌ Throws OptimisticLockError
+// Error: "Event was modified by another transaction (expected version 1)"
+```
+
+**Testing Coverage:**
+
+The state machine is tested at multiple layers:
+
+1. **Unit Tests** ([EventStatus.test.ts](../../src/modules/event-scheduling/domain/value-objects/EventStatus.test.ts)):
+   - All valid transitions return `true` from `isValidTransition()`
+   - All invalid transitions return `false` from `isValidTransition()`
+   - `validateTransition()` throws `InvalidStateTransitionError` for invalid transitions
+
+2. **Unit Tests** ([Event.test.ts](../../src/modules/event-scheduling/domain/entities/Event.test.ts)):
+   - `claim()` succeeds from PENDING, throws from all other states
+   - `markCompleted()` succeeds from PROCESSING, throws from all other states
+   - `markFailed()` succeeds from PROCESSING, throws from all other states
+   - Terminal states (COMPLETED, FAILED) cannot transition to any other state
+   - Version increments correctly on every state transition
+
+3. **Integration Tests** ([PrismaEventRepository.integration.test.ts](../../src/modules/event-scheduling/adapters/persistence/PrismaEventRepository.integration.test.ts)):
+   - Concurrent updates detected via version mismatch
+   - Version increments correctly through full lifecycle (PENDING → PROCESSING → COMPLETED)
+   - Optimistic lock error messages include event ID and expected version for debugging
+   - Concurrent `claimReadyEvents()` calls do not claim same event twice (FOR UPDATE SKIP LOCKED)
+
 ---
 
 ## Timezone (Value Object)

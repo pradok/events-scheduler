@@ -419,6 +419,165 @@ describe('PrismaEventRepository - Integration Tests', () => {
     });
   });
 
+  describe('optimistic locking - concurrent updates', () => {
+    it('should detect concurrent update when same event loaded twice and both modified', async () => {
+      /**
+       * Scenario: Two workers load the same event, both attempt to modify it.
+       * The first update should succeed, the second should fail with OptimisticLockError.
+       *
+       * This is the classic optimistic locking use case: preventing lost updates.
+       */
+
+      // Arrange - Create event in PENDING state
+      const eventId = randomUUID();
+      const targetTime = DateTime.now().plus({ days: 1 });
+      const event = new Event({
+        id: eventId,
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, targetTime),
+        deliveryPayload: { message: 'Test' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      await repository.create(event);
+
+      // Act - Load event twice (simulating two workers)
+      const eventInstance1 = await repository.findById(eventId);
+      const eventInstance2 = await repository.findById(eventId);
+
+      // Both instances have version 1 at this point
+      expect(eventInstance1!.version).toBe(1);
+      expect(eventInstance2!.version).toBe(1);
+
+      // Worker 1 claims the event (version 1 → 2)
+      const claimedEvent1 = eventInstance1!.claim();
+      await repository.update(claimedEvent1);
+
+      // Worker 2 attempts to claim the event (still has version 1, should fail)
+      const claimedEvent2 = eventInstance2!.claim();
+
+      // Assert - Worker 2 should get OptimisticLockError
+      await expect(repository.update(claimedEvent2)).rejects.toThrow(OptimisticLockError);
+      await expect(repository.update(claimedEvent2)).rejects.toThrow(
+        /was modified by another transaction.*expected version 1/
+      );
+
+      // Verify database state: only worker 1's update persisted
+      const finalEvent = await repository.findById(eventId);
+      expect(finalEvent!.status).toBe(EventStatus.PROCESSING);
+      expect(finalEvent!.version).toBe(2);
+    });
+
+    it('should increment version correctly through full event lifecycle', async () => {
+      /**
+       * Scenario: Verify version increments at each state transition:
+       * PENDING (v1) → PROCESSING (v2) → COMPLETED (v3)
+       */
+
+      // Arrange - Create event in PENDING state with version 1
+      const eventId = randomUUID();
+      const targetTime = DateTime.now().plus({ days: 1 });
+      const event = new Event({
+        id: eventId,
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, targetTime),
+        deliveryPayload: { message: 'Test' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      await repository.create(event);
+
+      // Verify initial state
+      const initialEvent = await repository.findById(eventId);
+      expect(initialEvent!.status).toBe(EventStatus.PENDING);
+      expect(initialEvent!.version).toBe(1);
+
+      // Act - Claim event (PENDING → PROCESSING, v1 → v2)
+      const claimedEvent = initialEvent!.claim();
+      await repository.update(claimedEvent);
+
+      const processingEvent = await repository.findById(eventId);
+      expect(processingEvent!.status).toBe(EventStatus.PROCESSING);
+      expect(processingEvent!.version).toBe(2);
+
+      // Act - Mark completed (PROCESSING → COMPLETED, v2 → v3)
+      const completedEvent = processingEvent!.markCompleted(DateTime.now());
+      await repository.update(completedEvent);
+
+      const finalEvent = await repository.findById(eventId);
+      expect(finalEvent!.status).toBe(EventStatus.COMPLETED);
+      expect(finalEvent!.version).toBe(3);
+
+      // Assert - Full lifecycle progression
+      expect(finalEvent!.executedAt).not.toBeNull();
+    });
+
+    it('should include event ID and version in OptimisticLockError message for debugging', async () => {
+      /**
+       * Verify error messages provide useful context for debugging concurrent update issues.
+       */
+
+      // Arrange
+      const eventId = randomUUID();
+      const targetTime = DateTime.now().plus({ days: 1 });
+      const event = new Event({
+        id: eventId,
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, targetTime),
+        deliveryPayload: { message: 'Test' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      await repository.create(event);
+
+      // Update event (version 1 → 2)
+      const claimedEvent = event.claim();
+      await repository.update(claimedEvent);
+
+      // Act - Try to update with stale version 1
+      const staleUpdate = event.claim();
+
+      // Assert - Error message includes event ID and expected version
+      try {
+        await repository.update(staleUpdate);
+        fail('Should have thrown OptimisticLockError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(OptimisticLockError);
+        const errorMessage = (error as Error).message;
+        expect(errorMessage).toContain(eventId); // Event ID for correlation
+        expect(errorMessage).toContain('expected version 1'); // Expected version
+        expect(errorMessage).toContain('modified by another transaction'); // Clear explanation
+      }
+    });
+  });
+
   describe('idempotency key persistence', () => {
     it('should persist idempotency key and retrieve it correctly', async () => {
       // Arrange
