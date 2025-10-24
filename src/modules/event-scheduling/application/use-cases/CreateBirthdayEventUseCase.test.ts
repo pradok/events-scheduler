@@ -267,6 +267,43 @@ describe('CreateBirthdayEventUseCase', () => {
         // Assert - Different idempotency keys
         expect(event1.idempotencyKey.toString()).not.toBe(event2.idempotencyKey.toString());
       });
+
+      it('should generate same idempotency key for same user and timestamp (deterministic)', async () => {
+        // Arrange
+        const dto: CreateBirthdayEventDTO = {
+          userId: 'user-123',
+          firstName: 'John',
+          lastName: 'Doe',
+          dateOfBirth: '1990-01-15',
+          timezone: 'America/New_York',
+        };
+
+        // Act - Execute twice with same input
+        const event1 = await useCase.execute(dto);
+        const event2 = await useCase.execute(dto);
+
+        // Assert - Same idempotency key (deterministic generation)
+        // Note: Both events will have same target timestamp since birthdays are predictable
+        expect(event1.idempotencyKey.toString()).toBe(event2.idempotencyKey.toString());
+      });
+
+      it('should generate idempotency key based on userId and targetTimestampUTC', async () => {
+        // Arrange
+        const dto: CreateBirthdayEventDTO = {
+          userId: 'user-test-123',
+          firstName: 'Test',
+          lastName: 'User',
+          dateOfBirth: '1995-06-20',
+          timezone: 'Europe/London',
+        };
+
+        // Act
+        const event = await useCase.execute(dto);
+
+        // Assert - Idempotency key exists and has expected format
+        expect(event.idempotencyKey).toBeDefined();
+        expect(event.idempotencyKey.toString()).toMatch(/^event-[a-f0-9]{16}$/);
+      });
     });
 
     describe('repository integration', () => {

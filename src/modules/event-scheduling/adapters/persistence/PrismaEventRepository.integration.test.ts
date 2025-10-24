@@ -418,4 +418,90 @@ describe('PrismaEventRepository - Integration Tests', () => {
       expect(dbEvents.every((e) => e.version === 2)).toBe(true); // Version incremented from 1 to 2
     });
   });
+
+  describe('idempotency key persistence', () => {
+    it('should persist idempotency key and retrieve it correctly', async () => {
+      // Arrange
+      const eventId = randomUUID();
+      const targetTime = DateTime.now().plus({ days: 1 });
+      const idempotencyKey = IdempotencyKey.generate(testUserId, targetTime);
+      const event = new Event({
+        id: eventId,
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey,
+        deliveryPayload: { message: 'Happy Birthday!' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Act - Create event
+      await repository.create(event);
+
+      // Act - Retrieve event
+      const retrievedEvent = await repository.findById(eventId);
+
+      // Assert
+      expect(retrievedEvent).not.toBeNull();
+      expect(retrievedEvent!.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(retrievedEvent!.idempotencyKey.equals(idempotencyKey)).toBe(true);
+    });
+
+    it('should enforce unique constraint on idempotency key', async () => {
+      // Arrange
+      const targetTime = DateTime.now().plus({ days: 1 });
+      const sharedIdempotencyKey = IdempotencyKey.generate(testUserId, targetTime);
+
+      const event1 = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: sharedIdempotencyKey,
+        deliveryPayload: { message: 'Happy Birthday!' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const event2 = new Event({
+        id: randomUUID(), // Different ID
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: targetTime,
+        targetTimestampLocal: targetTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: sharedIdempotencyKey, // Same idempotency key!
+        deliveryPayload: { message: 'Happy Birthday!' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Act - Create first event (should succeed)
+      await repository.create(event1);
+
+      // Act & Assert - Create second event with same idempotency key (should fail)
+      await expect(repository.create(event2)).rejects.toThrow();
+      // Prisma will throw a unique constraint violation error
+    });
+  });
 });

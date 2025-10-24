@@ -339,4 +339,103 @@ describe('Event', () => {
       expect(failedEvent.version).toBe(6);
     });
   });
+
+  describe('idempotency key persistence', () => {
+    it('should include idempotency key when event is created', () => {
+      // Arrange
+      const idempotencyKey = IdempotencyKey.generate(
+        'user-123',
+        DateTime.fromISO('2025-03-15T14:00:00Z')
+      );
+      const event = new Event({
+        ...validEventProps,
+        idempotencyKey,
+      });
+
+      // Assert
+      expect(event.idempotencyKey).toBe(idempotencyKey);
+      expect(event.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+    });
+
+    it('should preserve idempotency key when claiming event', () => {
+      // Arrange
+      const idempotencyKey = IdempotencyKey.generate(
+        'user-123',
+        DateTime.fromISO('2025-03-15T14:00:00Z')
+      );
+      const event = new Event({
+        ...validEventProps,
+        idempotencyKey,
+      });
+
+      // Act
+      const claimedEvent = event.claim();
+
+      // Assert
+      expect(claimedEvent.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(claimedEvent.idempotencyKey.equals(idempotencyKey)).toBe(true);
+    });
+
+    it('should preserve idempotency key when marking event completed', () => {
+      // Arrange
+      const idempotencyKey = IdempotencyKey.generate(
+        'user-123',
+        DateTime.fromISO('2025-03-15T14:00:00Z')
+      );
+      const event = new Event({
+        ...validEventProps,
+        status: EventStatus.PROCESSING,
+        idempotencyKey,
+      });
+      const executedAt = DateTime.now();
+
+      // Act
+      const completedEvent = event.markCompleted(executedAt);
+
+      // Assert
+      expect(completedEvent.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(completedEvent.idempotencyKey.equals(idempotencyKey)).toBe(true);
+    });
+
+    it('should preserve idempotency key when marking event failed', () => {
+      // Arrange
+      const idempotencyKey = IdempotencyKey.generate(
+        'user-123',
+        DateTime.fromISO('2025-03-15T14:00:00Z')
+      );
+      const event = new Event({
+        ...validEventProps,
+        status: EventStatus.PROCESSING,
+        idempotencyKey,
+      });
+
+      // Act
+      const failedEvent = event.markFailed('Network error');
+
+      // Assert
+      expect(failedEvent.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(failedEvent.idempotencyKey.equals(idempotencyKey)).toBe(true);
+    });
+
+    it('should preserve idempotency key through complete state lifecycle', () => {
+      // Arrange
+      const idempotencyKey = IdempotencyKey.generate(
+        'user-123',
+        DateTime.fromISO('2025-03-15T14:00:00Z')
+      );
+      const event = new Event({
+        ...validEventProps,
+        idempotencyKey,
+      });
+
+      // Act - Go through full lifecycle: PENDING → PROCESSING → COMPLETED
+      const claimedEvent = event.claim();
+      const completedEvent = claimedEvent.markCompleted(DateTime.now());
+
+      // Assert - Idempotency key unchanged at every step
+      expect(event.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(claimedEvent.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+      expect(completedEvent.idempotencyKey.toString()).toBe(idempotencyKey.toString());
+    });
+  });
 });

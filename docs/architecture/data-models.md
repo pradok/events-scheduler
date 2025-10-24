@@ -209,6 +209,15 @@ class DateOfBirth {
 
 **Purpose:** Generates unique, deterministic keys for preventing duplicate event deliveries during retries.
 
+The IdempotencyKey ensures that if an event execution fails due to transient errors (network timeouts, temporary service unavailability), retry attempts will send the same idempotency key to the external webhook endpoint. This allows the receiving service to detect and ignore duplicate requests, guaranteeing **exactly-once delivery semantics** even when the system retries multiple times.
+
+**Key Properties:**
+
+- **Deterministic:** Same userId + targetTimestampUTC + eventType always produces the same key
+- **Unique:** Different inputs always produce different keys (SHA-256 collision probability is negligible)
+- **Immutable:** Once generated for an event, the key never changes through state transitions
+- **Persistent:** Stored in database and included in all webhook requests
+
 **Structure:**
 
 ```typescript
@@ -226,6 +235,10 @@ class IdempotencyKey {
     return new IdempotencyKey(`event-${hash.substring(0, 16)}`);
   }
 
+  static fromString(value: string): IdempotencyKey {
+    return new IdempotencyKey(value);
+  }
+
   toString(): string {
     return this.value;
   }
@@ -236,7 +249,153 @@ class IdempotencyKey {
 }
 ```
 
-**Rationale:** Ensures that if the same event is retried (due to transient failure), the external webhook endpoint receives the same idempotency key and can deduplicate.
+**Key Format:** `event-{16_character_sha256_hash}`
+
+**Example:** `event-a1b2c3d4e5f6g7h8`
+
+**Generation Algorithm:**
+
+1. Concatenate: `userId + "-" + targetTimestampUTC.toISO() + "-" + eventType`
+2. Hash: Apply SHA-256 cryptographic hash function
+3. Truncate: Take first 16 characters of hex digest
+4. Format: Prefix with `"event-"` to create final key
+
+**Why SHA-256 Hash Instead of Plain IDs?**
+
+- **Security:** Doesn't expose internal user IDs or event timestamps to external systems
+- **Consistency:** Fixed 24-character length regardless of input length
+- **Collision Resistance:** SHA-256 makes accidental duplicates virtually impossible
+- **Privacy:** External webhook services cannot reverse-engineer user data from the key
+
+**Deterministic Behavior Guarantee:**
+
+Given the same inputs, `IdempotencyKey.generate()` will **always** produce identical output:
+
+```typescript
+// These two calls produce identical keys:
+const key1 = IdempotencyKey.generate('user-123', DateTime.fromISO('2025-03-15T14:00:00Z'));
+const key2 = IdempotencyKey.generate('user-123', DateTime.fromISO('2025-03-15T14:00:00Z'));
+
+key1.equals(key2); // true
+key1.toString() === key2.toString(); // true
+```
+
+**Webhook Header Usage:**
+
+The idempotency key is sent to webhook endpoints in the `X-Idempotency-Key` HTTP header:
+
+```http
+POST /webhook HTTP/1.1
+Host: example.com
+Content-Type: application/json
+X-Idempotency-Key: event-a1b2c3d4e5f6g7h8
+
+{
+  "message": "Hey, John Doe it's your birthday"
+}
+```
+
+**Retry Consistency:**
+
+When an event execution fails with a transient error (503 Service Unavailable, network timeout), the system retries the webhook delivery. All retry attempts use the **same idempotency key**:
+
+```
+Attempt 1: X-Idempotency-Key: event-a1b2c3d4e5f6g7h8  (fails with 503)
+Attempt 2: X-Idempotency-Key: event-a1b2c3d4e5f6g7h8  (fails with timeout)
+Attempt 3: X-Idempotency-Key: event-a1b2c3d4e5f6g7h8  (succeeds)
+```
+
+The external webhook service can use this header to detect duplicates and avoid processing the same event multiple times.
+
+**External Webhook Service Configuration:**
+
+**Testing with RequestBin/webhook.site:**
+
+For development and integration testing, you can use services like RequestBin or webhook.site to inspect idempotency keys:
+
+1. **Create endpoint:** Visit https://requestbin.com or https://webhook.site to create a test endpoint
+2. **Configure environment variable:**
+   ```bash
+   WEBHOOK_TEST_URL=https://your-endpoint-id.requestbin.com
+   ```
+3. **Run integration tests:** Execute your webhook delivery tests
+4. **View requests:** Open the RequestBin dashboard to see all incoming requests
+5. **Verify idempotency:** Check that retry attempts have identical `X-Idempotency-Key` headers
+
+**Important:** RequestBin and webhook.site are **passive inspection tools**—they log requests but do NOT enforce idempotency automatically. They allow you to verify that the system sends the correct headers.
+
+**Production Webhook Implementation:**
+
+For production webhook endpoints, the receiving service must implement idempotency logic:
+
+```typescript
+// Example: Webhook receiver implementing idempotency
+app.post('/webhook', async (req, res) => {
+  const idempotencyKey = req.headers['x-idempotency-key'];
+
+  // Check if this key was already processed
+  const alreadyProcessed = await db.processedKeys.exists(idempotencyKey);
+
+  if (alreadyProcessed) {
+    // Duplicate request - return success without reprocessing
+    return res.status(200).json({ success: true, duplicate: true });
+  }
+
+  // Process the webhook payload
+  await processWebhook(req.body);
+
+  // Store the idempotency key to prevent future duplicates
+  await db.processedKeys.save(idempotencyKey, { expiresIn: '7 days' });
+
+  return res.status(200).json({ success: true });
+});
+```
+
+**Logging and Debugging:**
+
+All log statements related to event execution include the idempotency key for request tracing:
+
+```typescript
+logger.info({
+  msg: 'Executing event',
+  eventId: 'event-123',
+  idempotencyKey: 'event-a1b2c3d4e5f6g7h8',
+  userId: 'user-456',
+  targetTimestampUTC: '2025-03-15T14:00:00Z'
+});
+```
+
+**Example Log Output:**
+
+```json
+{
+  "level": "info",
+  "msg": "Webhook delivery succeeded",
+  "eventId": "event-123",
+  "idempotencyKey": "event-a1b2c3d4e5f6g7h8",
+  "statusCode": 200,
+  "durationMs": 245,
+  "timestamp": "2025-03-15T14:00:01.245Z"
+}
+```
+
+Use the `idempotencyKey` field to correlate logs across multiple retry attempts and trace the complete lifecycle of an event execution.
+
+**Database Storage:**
+
+The idempotency key is stored in the `events` table with a unique constraint:
+
+```sql
+CREATE TABLE events (
+  id UUID PRIMARY KEY,
+  idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+  -- ... other columns
+);
+```
+
+The unique constraint prevents accidental creation of duplicate events with the same idempotency key, providing an additional layer of data integrity.
+
+**Rationale:** Ensures that if the same event is retried (due to transient failure), the external webhook endpoint receives the same idempotency key and can deduplicate, achieving exactly-once delivery semantics.
 
 ---
 
