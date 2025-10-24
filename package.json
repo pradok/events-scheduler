@@ -68,6 +68,7 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.916.0",
     "@fastify/cors": "^9.0.1",
     "@prisma/client": "^6.17.1",
     "fastify": "^4.26.0",

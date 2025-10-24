@@ -145,3 +145,48 @@ export const ErrorResponseSchema = z.object({
  * TypeScript type derived from ErrorResponseSchema
  */
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+/**
+ * Zod schema for SQS Message Payload validation
+ *
+ * This schema serves as the single source of truth for SQS message structure:
+ * - Runtime validation (via schema.parse())
+ * - Compile-time types (via z.infer<>)
+ * - Message format validation before sending to queue
+ *
+ * Message Structure:
+ * - eventId: UUID of the Event entity to be processed
+ * - eventType: Type of event (e.g., "BIRTHDAY") for message filtering
+ * - idempotencyKey: Unique key for duplicate detection at webhook delivery
+ * - metadata: Additional context to minimize database queries in worker
+ *   - userId: UUID of the user for logging/debugging
+ *   - targetTimestampUTC: ISO 8601 timestamp of scheduled execution
+ *   - deliveryPayload: JSON payload to deliver to webhook endpoint
+ *
+ * @see ISQSClient port interface for usage
+ * @see SQSAdapter for concrete implementation
+ * @see docs/architecture/coding-standards.md#Zod-Schemas-as-Single-Source-of-Truth
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention -- Zod schemas use PascalCase by convention
+export const SQSMessagePayloadSchema = z.object({
+  eventId: z.string().uuid('Event ID must be a valid UUID'),
+  eventType: z.string().min(1, 'Event type is required'),
+  idempotencyKey: z.string().min(1, 'Idempotency key is required'),
+  metadata: z.object({
+    userId: z.string().uuid('User ID must be a valid UUID'),
+    targetTimestampUTC: z.string().min(1, 'Target timestamp is required'),
+    deliveryPayload: z.record(z.string(), z.any()),
+  }),
+});
+
+/**
+ * TypeScript type derived from SQSMessagePayloadSchema
+ *
+ * This type is automatically inferred from the Zod schema, ensuring:
+ * - Schema changes automatically propagate to all code using this type
+ * - No drift between validation rules and type definitions
+ * - Single location to update when requirements change
+ *
+ * DO NOT manually define this type - always derive it from the schema using z.infer<>
+ */
+export type SQSMessagePayload = z.infer<typeof SQSMessagePayloadSchema>;
