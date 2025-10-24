@@ -190,3 +190,67 @@ export const SQSMessagePayloadSchema = z.object({
  * DO NOT manually define this type - always derive it from the schema using z.infer<>
  */
 export type SQSMessagePayload = z.infer<typeof SQSMessagePayloadSchema>;
+
+/**
+ * Zod schema for Webhook Payload validation
+ *
+ * This schema serves as the single source of truth for webhook delivery payloads:
+ * - Runtime validation (via schema.parse())
+ * - Compile-time types (via z.infer<>)
+ * - Payload validation before sending HTTP requests
+ *
+ * Payload Structure:
+ * - message: Birthday message formatted with user's name
+ *   Example: "Hey, John Doe it's your birthday"
+ *
+ * This schema ensures all webhook payloads are validated before delivery,
+ * preventing malformed requests to external webhook endpoints.
+ *
+ * @see IWebhookClient port interface for usage
+ * @see WebhookAdapter for concrete implementation
+ * @see docs/architecture/coding-standards.md#Zod-Schemas-as-Single-Source-of-Truth
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention -- Zod schemas use PascalCase by convention
+export const WebhookPayloadSchema = z.object({
+  message: z.string().min(1, 'Message is required'),
+});
+
+/**
+ * TypeScript type derived from WebhookPayloadSchema
+ *
+ * This type is automatically inferred from the Zod schema, ensuring:
+ * - Schema changes automatically propagate to all code using this type
+ * - No drift between validation rules and type definitions
+ * - Single location to update when requirements change
+ *
+ * DO NOT manually define this type - always derive it from the schema using z.infer<>
+ */
+export type WebhookPayload = z.infer<typeof WebhookPayloadSchema>;
+
+/**
+ * Zod schema for Webhook Response validation
+ *
+ * This schema validates responses from external webhook endpoints.
+ * Ensures webhook services return expected response format.
+ *
+ * Response Structure:
+ * - success: Boolean indicating delivery success
+ * - timestamp: ISO 8601 timestamp of when webhook processed the request
+ * - message: Optional human-readable message from webhook service
+ *
+ * @see IWebhookClient port interface for usage
+ * @see WebhookAdapter for concrete implementation
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention -- Zod schemas use PascalCase by convention
+export const WebhookResponseSchema = z.object({
+  success: z.boolean().optional().default(true),
+  timestamp: z.string().optional(),
+  message: z.string().optional(),
+});
+
+/**
+ * TypeScript type derived from WebhookResponseSchema
+ *
+ * This type is automatically inferred from the Zod schema.
+ */
+export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

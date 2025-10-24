@@ -34,6 +34,7 @@
     "lambda:deploy": "./scripts/lambda-deploy.sh",
     "lambda:configure": "./scripts/lambda-eventbridge.sh",
     "lambda:all": "npm run lambda:build && npm run lambda:deploy:localstack",
+    "webhook:mock": "node ./scripts/mock-webhook-server.js",
     "prepare": "husky install"
   },
   "prisma": {
@@ -69,6 +70,7 @@
     "husky": "8.0.3",
     "jest": "^29.7.0",
     "lint-staged": "15.2.0",
+    "nock": "^13.5.0",
     "prettier": "3.2.5",
     "prisma": "^6.17.1",
     "prisma-zod-generator": "^1.29.1",
@@ -81,6 +83,8 @@
     "@aws-sdk/client-sqs": "^3.916.0",
     "@fastify/cors": "^9.0.1",
     "@prisma/client": "^6.17.1",
+    "axios": "^1.6.7",
+    "axios-retry": "^3.8.0",
     "fastify": "^4.26.0",
     "luxon": "^3.4.4",
     "pino": "^10.1.0",
