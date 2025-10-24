@@ -48,8 +48,16 @@ awslocal events put-rule \
   --description "Triggers time-based event scheduler every 1 minute (all event types)" \
   || echo "EventBridge rule may already exist"
 
-# Note: Lambda functions and API Gateway will be set up in later stories
-# This initialization script prepares the message queue infrastructure
+# Create IAM role for Lambda execution (required even in LocalStack)
+echo "Creating IAM role for Lambda: lambda-execution-role"
+awslocal iam create-role \
+  --role-name lambda-execution-role \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}' \
+  || echo "IAM role may already exist"
+
+# Note: Lambda function deployment and EventBridge target configuration
+# will be added after Lambda code is built and packaged
+# For now, the infrastructure (SQS, EventBridge rule, IAM role) is ready
 
 echo "=========================================="
 echo "LocalStack initialization complete!"
@@ -59,8 +67,15 @@ echo "Available services:"
 echo "- SQS Queue: events-queue"
 echo "- SQS DLQ: events-dlq"
 echo "- EventBridge Rule: event-scheduler-rule"
+echo "- IAM Role: lambda-execution-role"
 echo ""
 echo "Test commands:"
 echo "  awslocal sqs list-queues"
 echo "  awslocal events list-rules"
+echo "  awslocal iam list-roles"
+echo ""
+echo "Next steps:"
+echo "  1. Build Lambda package: npm run build:lambda"
+echo "  2. Deploy Lambda: npm run deploy:lambda:local"
+echo "  3. Add EventBridge target: npm run configure:eventbridge"
 echo "=========================================="

@@ -26,20 +26,23 @@ import pino from 'pino';
  */
 
 const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+const isLambda = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
 const logLevel = process.env.LOG_LEVEL || 'info';
 
 export const logger = pino({
   level: logLevel,
-  transport: isDevelopment
-    ? {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'HH:MM:ss Z',
-          ignore: 'pid,hostname',
-        },
-      }
-    : undefined, // JSON output in production
+  // Only use pino-pretty in local development (NOT in Lambda or tests)
+  transport:
+    isDevelopment && !isLambda
+      ? {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss Z',
+            ignore: 'pid,hostname',
+          },
+        }
+      : undefined, // JSON output in Lambda/production/tests
   base: {
     env: process.env.NODE_ENV || 'development',
   },

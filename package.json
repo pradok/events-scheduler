@@ -22,11 +22,18 @@
     "docker:stop": "./scripts/docker-stop.sh",
     "docker:reset": "./scripts/docker-reset.sh",
     "docker:logs": "./scripts/docker-logs.sh",
+    "docker:teardown": "cd docker && docker-compose down -v",
+    "docker:teardown:all": "cd docker && docker-compose down -v --rmi all",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
+    "lambda:build": "./scripts/lambda-build.sh",
+    "lambda:deploy:localstack": "node ./scripts/deploy-lambda.js",
+    "lambda:deploy": "./scripts/lambda-deploy.sh",
+    "lambda:configure": "./scripts/lambda-eventbridge.sh",
+    "lambda:all": "npm run lambda:build && npm run lambda:deploy:localstack",
     "prepare": "husky install"
   },
   "prisma": {
@@ -49,6 +56,8 @@
     ]
   },
   "devDependencies": {
+    "@aws-sdk/client-eventbridge": "^3.916.0",
+    "@aws-sdk/client-lambda": "^3.916.0",
     "@testcontainers/postgresql": "^10.5.0",
     "@types/jest": "^29.5.11",
     "@types/luxon": "^3.4.2",
@@ -68,6 +77,7 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
+    "@aws-sdk/client-iam": "^3.916.0",
     "@aws-sdk/client-sqs": "^3.916.0",
     "@fastify/cors": "^9.0.1",
     "@prisma/client": "^6.17.1",

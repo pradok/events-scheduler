@@ -120,6 +120,44 @@ npm run docker:reset
 ./scripts/docker-reset.sh
 ```
 
+This stops containers, removes all volumes (data), and restarts fresh.
+
+#### Complete Teardown
+
+To completely remove Docker containers, volumes, and free up disk space:
+
+**Remove containers and volumes (recommended):**
+
+```bash
+npm run docker:teardown
+
+# Or use docker-compose directly
+cd docker && docker-compose down -v
+```
+
+This removes:
+
+- ✅ Containers (stopped and removed)
+- ✅ Volumes (all database data deleted)
+- ✅ Networks (removed)
+- ❌ Images (kept for faster restart)
+
+**Remove everything including images (nuclear option):**
+
+```bash
+npm run docker:teardown:all
+
+# Or use docker-compose directly
+cd docker && docker-compose down -v --rmi all
+```
+
+This removes containers, volumes, networks, AND Docker images (PostgreSQL, LocalStack). You'll need to re-download images (~500MB) on next start.
+
+**When to use:**
+
+- **`docker-compose down -v`**: Clean up test data completely
+- **`docker-compose down -v --rmi all`**: Free up disk space, remove all traces
+
 #### Accessing PostgreSQL
 
 ```bash
@@ -230,6 +268,8 @@ This opens a web interface at http://localhost:5555 where you can view and edit 
 | **Docker Stop** | `npm run docker:stop` | Stop all Docker services |
 | **Docker Reset** | `npm run docker:reset` | Reset database (deletes all data) |
 | **Docker Logs** | `npm run docker:logs` | View logs for all services |
+| **Docker Teardown** | `npm run docker:teardown` | Remove containers and volumes |
+| **Docker Teardown All** | `npm run docker:teardown:all` | Remove containers, volumes, and images |
 | **Prisma Generate** | `npm run prisma:generate` | Generate Prisma Client |
 | **Prisma Migrate** | `npm run prisma:migrate` | Create and apply migrations |
 | **Prisma Studio** | `npm run prisma:studio` | Open database GUI |
@@ -400,9 +440,46 @@ Unit tests cover domain entities, value objects, and services:
 
 **Target coverage:** 100% for domain layer
 
-#### E2E Tests 📋 Planned
+#### E2E Tests ✅ Implemented (Lambda)
 
-End-to-end tests will verify complete user workflows with real database and services.
+End-to-end tests verify the complete Lambda deployment and execution flow in LocalStack:
+
+```bash
+# Deploy Lambda to LocalStack
+npm run lambda:all
+
+# Run E2E tests for deployed Lambda
+npm test -- schedulerHandler.e2e.test.ts
+```
+
+**Scheduler Lambda E2E Tests:**
+
+- **Infrastructure verification**: Lambda function exists with correct configuration
+- **EventBridge integration**: Rule has Lambda as target
+- **Manual invocation**: Lambda claims events and sends to SQS
+- **Error handling**: Lambda handles empty database gracefully
+
+**Quick Reference - Lambda Commands:**
+
+```bash
+npm run lambda:build          # Build Lambda package with esbuild
+npm run lambda:deploy:localstack  # Deploy to LocalStack
+npm run lambda:all            # Build + Deploy (recommended)
+```
+
+**Test all scheduler layers:**
+
+```bash
+# Run all scheduler tests (unit + integration + E2E)
+npm test -- schedulerHandler
+
+# Run specific test types
+npm test -- schedulerHandler.test.ts              # Unit tests only
+npm test -- schedulerHandler.integration.test.ts  # Integration tests only
+npm test -- schedulerHandler.e2e.test.ts          # E2E tests only
+```
+
+**Location:** `src/adapters/primary/lambda/*.e2e.test.ts`
 
 ### Testing Infrastructure
 
