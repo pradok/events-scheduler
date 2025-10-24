@@ -465,6 +465,247 @@ describe('PrismaEventRepository', () => {
 
 ---
 
+## Manual Testing with LocalStack
+
+This section covers manual E2E testing using AWS CLI commands against LocalStack.
+
+### Prerequisites for Manual Testing
+
+You have **three options** for interacting with LocalStack manually:
+
+#### Option 1: AWS CLI with endpoint flag (no extra install)
+
+```bash
+aws --endpoint-url=http://localhost:4566 sqs list-queues
+```
+
+#### Option 2: Install `awslocal` wrapper (recommended)
+
+```bash
+# Install awslocal (requires Python/pip)
+pip install awscli-local
+
+# Now commands are shorter
+awslocal sqs list-queues
+```
+
+#### Option 3: Create shell alias
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+alias awslocal='aws --endpoint-url=http://localhost:4566'
+```
+
+#### Recommendation
+
+Install `awslocal` for the cleanest manual testing experience.
+
+### Verify LocalStack is Running
+
+```bash
+# Check LocalStack health
+curl http://localhost:4566/_localstack/health | python3 -m json.tool
+
+# Expected output:
+# {
+#   "services": {
+#     "lambda": "running",
+#     "sqs": "running",
+#     "events": "running"
+#   }
+# }
+```
+
+### List Resources
+
+```bash
+# List SQS queues
+awslocal sqs list-queues
+
+# List Lambda functions
+awslocal lambda list-functions
+
+# List EventBridge rules
+awslocal events list-rules
+
+# List EventBridge targets for a rule
+awslocal events list-targets-by-rule --rule event-scheduler-rule
+
+# Get Lambda function details
+awslocal lambda get-function --function-name event-scheduler
+```
+
+### Manual Lambda Invocation
+
+```bash
+# Invoke Lambda manually (simulates EventBridge trigger)
+awslocal lambda invoke \
+  --function-name event-scheduler \
+  --payload '{"test": true}' \
+  /tmp/output.json
+
+# View the response
+cat /tmp/output.json
+
+# Check Lambda logs (if available)
+awslocal logs tail /aws/lambda/event-scheduler --since 5m
+```
+
+### SQS Queue Operations
+
+```bash
+# Get queue URL
+awslocal sqs get-queue-url --queue-name bday-events-queue
+
+# Send test message to queue
+awslocal sqs send-message \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --message-body '{
+    "eventId": "test-123",
+    "eventType": "BIRTHDAY",
+    "idempotencyKey": "test-key-123",
+    "metadata": {
+      "userId": "user-123",
+      "targetTimestampUTC": "2025-10-24T09:00:00Z"
+    }
+  }'
+
+# Receive messages from queue
+awslocal sqs receive-message \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --max-number-of-messages 10
+
+# Purge queue (delete all messages)
+awslocal sqs purge-queue \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue
+```
+
+### Database Operations
+
+```bash
+# Access PostgreSQL directly
+docker exec -it bday-postgres psql -U bday_user -d bday_db
+
+# Check pending events
+psql> SELECT id, status, event_type, target_timestamp_utc
+      FROM events
+      WHERE status = 'PENDING'
+      ORDER BY target_timestamp_utc
+      LIMIT 10;
+
+# Check event status transitions
+psql> SELECT id, status, created_at, executed_at
+      FROM events
+      ORDER BY created_at DESC
+      LIMIT 5;
+```
+
+### End-to-End Manual Test Flow
+
+Here's a complete manual E2E test you can run:
+
+```bash
+# 1. Ensure LocalStack and PostgreSQL are running
+npm run docker:start
+
+# 2. Deploy Lambda
+npm run lambda:all
+
+# 3. Create a test user and event in database
+docker exec -it bday-postgres psql -U bday_user -d bday_db -c "
+INSERT INTO users (id, first_name, last_name, date_of_birth, timezone, created_at, updated_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440000', 'Test', 'User', '1990-01-01', 'UTC', NOW(), NOW());
+
+INSERT INTO events (id, user_id, event_type, status, target_timestamp_utc, target_timestamp_local, target_timezone, idempotency_key, delivery_payload, retry_count, version, created_at, updated_at)
+VALUES (
+  '660e8400-e29b-41d4-a716-446655440000',
+  '550e8400-e29b-41d4-a716-446655440000',
+  'BIRTHDAY',
+  'PENDING',
+  NOW() - INTERVAL '1 hour',  -- Event is due now
+  NOW() - INTERVAL '1 hour',
+  'UTC',
+  'manual-test-key',
+  '{\"message\": \"Happy Birthday!\"}',
+  0,
+  1,
+  NOW(),
+  NOW()
+);
+"
+
+# 4. Invoke Lambda manually
+awslocal lambda invoke \
+  --function-name event-scheduler \
+  --payload '{}' \
+  /tmp/output.json && cat /tmp/output.json
+
+# 5. Check if event was claimed
+docker exec -it bday-postgres psql -U bday_user -d bday_db -c "
+SELECT id, status, event_type FROM events WHERE id = '660e8400-e29b-41d4-a716-446655440000';
+"
+# Expected: status should be 'PROCESSING'
+
+# 6. Check if message was sent to SQS
+awslocal sqs receive-message \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --max-number-of-messages 10
+
+# Expected: Should see message with eventId '660e8400-e29b-41d4-a716-446655440000'
+
+# 7. Clean up
+docker exec -it bday-postgres psql -U bday_user -d bday_db -c "
+DELETE FROM events WHERE id = '660e8400-e29b-41d4-a716-446655440000';
+DELETE FROM users WHERE id = '550e8400-e29b-41d4-a716-446655440000';
+"
+
+awslocal sqs purge-queue \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue
+```
+
+### Manual Testing Debugging
+
+**Lambda not responding:**
+
+```bash
+# Check if Lambda exists
+awslocal lambda list-functions
+
+# Check Lambda configuration
+awslocal lambda get-function --function-name event-scheduler
+
+# Redeploy Lambda
+npm run lambda:all
+```
+
+**Queue not receiving messages:**
+
+```bash
+# Check queue exists
+awslocal sqs list-queues
+
+# Check queue attributes
+awslocal sqs get-queue-attributes \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --attribute-names All
+```
+
+**Events not being claimed:**
+
+```bash
+# Check if events are actually PENDING and due
+docker exec -it bday-postgres psql -U bday_user -d bday_db -c "
+SELECT id, status, target_timestamp_utc, NOW()
+FROM events
+WHERE status = 'PENDING' AND target_timestamp_utc <= NOW();
+"
+
+# Check Lambda logs for errors in schedulerHandler
+# (Lambda execution logs are visible in console output when invoked)
+```
+
+---
+
 ## Connection Pooling Testing
 
 ### Why Test Connection Pooling?
