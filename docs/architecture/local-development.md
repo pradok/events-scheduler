@@ -161,7 +161,7 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/bday"
 
 ### LocalStack Configuration
 
-LocalStack emulates AWS services locally:
+LocalStack emulates AWS services locally for development and testing.
 
 **Endpoint:**
 ```
@@ -174,6 +174,47 @@ http://localhost:4566
 - SQS (message queue)
 - EventBridge (scheduler)
 - SNS (notifications)
+
+**How LocalStack Works:**
+
+1. **No automatic resource creation** - LocalStack doesn't auto-create resources; you must explicitly provision them
+2. **Use AWS SDK or CLI** - Create resources using standard AWS tools (SDK, CLI, Terraform)
+3. **Ephemeral by default** - Resources disappear when LocalStack stops (unless persistence is enabled)
+
+**Dependencies:**
+
+| Dependency | Required? | Purpose |
+|------------|-----------|---------|
+| Docker | ✅ Yes | Only hard requirement to run LocalStack |
+| AWS SDK for JavaScript | ✅ Yes | Already installed (`@aws-sdk/client-*`) |
+| LocalStack CLI | ❌ No | Optional convenience wrapper |
+| `awslocal` CLI | ❌ No | Optional, bundled inside LocalStack container |
+
+**Initialization Hooks:**
+
+LocalStack executes scripts in `/etc/localstack/init/ready.d/` when fully operational:
+
+- Our `init-aws.sh` creates SQS queues, EventBridge rules, IAM roles
+- Scripts run in alphanumeric order
+- Failed scripts don't block subsequent scripts
+
+**Common Pattern in Tests:**
+
+```typescript
+// Tests create resources directly with AWS SDK
+const sqsClient = new SQSClient({
+  endpoint: 'http://localhost:4566',
+  region: 'us-east-1',
+  credentials: { accessKeyId: 'test', secretAccessKey: 'test' }
+});
+
+await sqsClient.send(new CreateQueueCommand({ QueueName: 'test-queue' }));
+```
+
+**References:**
+
+- [LocalStack Quickstart](https://docs.localstack.cloud/getting-started/quickstart/)
+- [LocalStack Init Hooks](https://docs.localstack.cloud/references/init-hooks/)
 
 ---
 
