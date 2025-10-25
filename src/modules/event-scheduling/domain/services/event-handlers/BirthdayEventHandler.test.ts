@@ -517,6 +517,43 @@ describe('BirthdayEventHandler', () => {
       expect(nextBirthday.second).toBe(0);
       expect(nextBirthday.zoneName).toBe('America/New_York');
     });
+
+    it('should calculate next occurrence seconds from now (fast test execution)', () => {
+      // Arrange - Configure handler for 10 seconds from now
+      const tenSecondsFromNow = DateTime.now().plus({ seconds: 10 });
+      const testConfig = {
+        hour: tenSecondsFromNow.hour,
+        minute: tenSecondsFromNow.minute,
+      };
+      const customHandler = new BirthdayEventHandler(testConfig);
+
+      // User's birthday is today
+      const today = DateTime.now();
+      const user = new User({
+        id: 'user-1',
+        firstName: 'Test',
+        lastName: 'User',
+        dateOfBirth: new DateOfBirth(
+          `${today.year - 30}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`
+        ),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user));
+
+      // Assert - Next birthday should be scheduled for configured time
+      expect(nextBirthday.hour).toBe(testConfig.hour);
+      expect(nextBirthday.minute).toBe(testConfig.minute);
+      expect(nextBirthday.second).toBe(0);
+
+      // Verify it's in the near future (within 1 year)
+      const diffInSeconds = nextBirthday.diff(DateTime.now(), 'seconds').seconds;
+      expect(diffInSeconds).toBeGreaterThan(0); // Future
+      expect(diffInSeconds).toBeLessThan(365 * 24 * 60 * 60); // Within 1 year
+    });
   });
 
   describe('Domain Layer Purity', () => {
