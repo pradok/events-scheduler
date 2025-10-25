@@ -231,3 +231,12 @@
 10. Add troubleshooting guide for common LocalStack issues
 
 **Note:** This is a cleanup/refactoring story to be completed after all feature stories are done.
+
+**Implementation Discovery:** Upon detailed analysis during story preparation, the LocalStack architecture is already well-designed with proper separation between persistent infrastructure (manual E2E testing/demos) and ephemeral test resources (automated tests). The actual work required is:
+
+- Fix queue name mismatch bug: `bday-events-queue` → `events-queue` in deploy-lambda.js
+- Remove deprecated shell scripts (lambda-deploy.sh, lambda-eventbridge.sh)
+- Document the existing dual-purpose LocalStack pattern
+- Add troubleshooting guide for common LocalStack issues
+
+Most acceptance criteria validate existing correct patterns rather than requiring implementation changes. Estimated effort: ~30 minutes.
