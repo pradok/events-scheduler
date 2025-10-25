@@ -31,8 +31,6 @@
     "db:reset": "prisma migrate reset",
     "lambda:build": "./scripts/lambda-build.sh",
     "lambda:deploy:localstack": "node ./scripts/deploy-lambda.js",
-    "lambda:deploy": "./scripts/lambda-deploy.sh",
-    "lambda:configure": "./scripts/lambda-eventbridge.sh",
     "lambda:all": "npm run lambda:build && npm run lambda:deploy:localstack",
     "webhook:mock": "node ./scripts/mock-webhook-server.js",
     "prepare": "husky install"

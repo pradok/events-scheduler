@@ -169,18 +169,50 @@ psql -h localhost -p 5432 -U bday_user -d bday_db
 docker exec -it bday-postgres psql -U bday_user -d bday_db
 ```
 
-#### Testing LocalStack
+#### LocalStack Setup
 
+LocalStack provides local AWS service emulation. The setup is automated via Docker Compose.
+
+**Two-Step Deployment Process:**
+
+1. **Start Infrastructure** (automatic via docker-compose):
+   ```bash
+   npm run docker:start
+   ```
+
+   This creates persistent infrastructure:
+   - SQS queues: `events-queue`, `events-dlq`
+   - EventBridge rule: `event-scheduler-rule`
+   - IAM role: `lambda-execution-role`
+
+2. **Deploy Lambda Function** (manual):
+   ```bash
+   # Build and deploy Lambda
+   npm run lambda:all
+
+   # Or run separately:
+   npm run lambda:build                 # Build Lambda package
+   npm run lambda:deploy:localstack     # Deploy to LocalStack
+   ```
+
+**Verify LocalStack Health:**
 ```bash
-# Check LocalStack health
+# Check all services
 curl http://localhost:4566/_localstack/health
 
 # List SQS queues (requires awslocal CLI)
 awslocal sqs list-queues
 
+# List Lambda functions
+awslocal lambda list-functions
+
 # List EventBridge rules
 awslocal events list-rules
 ```
+
+**Documentation:**
+- [LocalStack Setup Guide](docs/architecture/localstack-setup.md) - Architecture and best practices
+- [LocalStack Troubleshooting](docs/architecture/localstack-troubleshooting.md) - Common issues and solutions
 
 #### Troubleshooting Docker
 
@@ -275,6 +307,9 @@ This opens a web interface at http://localhost:5555 where you can view and edit 
 | **Prisma Studio** | `npm run prisma:studio` | Open database GUI |
 | **DB Seed** | `npm run db:seed` | Populate database with sample data |
 | **DB Reset** | `npm run db:reset` | Reset database (deletes all data, reapplies migrations, reseeds) |
+| **Lambda Build** | `npm run lambda:build` | Build Lambda package for LocalStack |
+| **Lambda Deploy** | `npm run lambda:deploy:localstack` | Deploy Lambda to LocalStack using AWS SDK |
+| **Lambda All** | `npm run lambda:all` | Build and deploy Lambda (recommended) |
 
 ### Code Quality
 
