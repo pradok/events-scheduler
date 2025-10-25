@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import type { SQSEvent, SQSRecord } from 'aws-lambda';
 import { PrismaEventRepository } from '../../../modules/event-scheduling/adapters/persistence/PrismaEventRepository';
+import { PrismaUserRepository } from '../../../modules/user/adapters/persistence/PrismaUserRepository';
+import { BirthdayEventHandler } from '../../../modules/event-scheduling/domain/services/event-handlers/BirthdayEventHandler';
+import { TimezoneService } from '../../../modules/event-scheduling/domain/services/TimezoneService';
 import { WebhookAdapter } from '../../secondary/delivery/WebhookAdapter';
 import { ExecuteEventUseCase } from '../../../modules/event-scheduling/application/use-cases/ExecuteEventUseCase';
 import {
@@ -82,8 +85,17 @@ export async function handler(event: SQSEvent): Promise<void> {
   // Dependency injection: Create repositories, adapters, and use cases
   const prisma = getPrismaClient();
   const eventRepository = new PrismaEventRepository(prisma);
+  const userRepository = new PrismaUserRepository(prisma);
   const webhookClient = new WebhookAdapter(process.env.WEBHOOK_TEST_URL!);
-  const executeEventUseCase = new ExecuteEventUseCase(eventRepository, webhookClient);
+  const birthdayEventHandler = new BirthdayEventHandler();
+  const timezoneService = new TimezoneService();
+  const executeEventUseCase = new ExecuteEventUseCase(
+    eventRepository,
+    webhookClient,
+    userRepository,
+    birthdayEventHandler,
+    timezoneService
+  );
 
   // Process each SQS record independently
   for (const record of event.Records) {

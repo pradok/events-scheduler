@@ -7,6 +7,9 @@ import {
 } from '../../../../__tests__/integration/helpers/testDatabase';
 import { ExecuteEventUseCase } from './ExecuteEventUseCase';
 import { PrismaEventRepository } from '../../adapters/persistence/PrismaEventRepository';
+import { PrismaUserRepository } from '../../../user/adapters/persistence/PrismaUserRepository';
+import { BirthdayEventHandler } from '../../domain/services/event-handlers/BirthdayEventHandler';
+import { TimezoneService } from '../../domain/services/TimezoneService';
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
@@ -53,6 +56,7 @@ class MockWebhookClient implements IWebhookClient {
 describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
   let prisma: PrismaClient;
   let repository: PrismaEventRepository;
+  let userRepository: PrismaUserRepository;
   let mockWebhookClient: MockWebhookClient;
   let useCase: ExecuteEventUseCase;
   let testUserId: string;
@@ -60,8 +64,17 @@ describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
   beforeAll(async () => {
     prisma = await startTestDatabase();
     repository = new PrismaEventRepository(prisma);
+    userRepository = new PrismaUserRepository(prisma);
     mockWebhookClient = new MockWebhookClient();
-    useCase = new ExecuteEventUseCase(repository, mockWebhookClient);
+    const birthdayEventHandler = new BirthdayEventHandler();
+    const timezoneService = new TimezoneService();
+    useCase = new ExecuteEventUseCase(
+      repository,
+      mockWebhookClient,
+      userRepository,
+      birthdayEventHandler,
+      timezoneService
+    );
   }, 60000);
 
   afterAll(async () => {
