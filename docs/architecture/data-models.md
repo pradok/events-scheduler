@@ -53,7 +53,7 @@ Additionally, we use **Value Objects** (DDD pattern) for type-safe, validated da
 - `updateTimezone(newTimezone: Timezone): void` - Updates timezone and triggers recalculation of pending events
 - `updateName(firstName: string, lastName: string): void` - Updates user's name
 
-**Note:** Birthday calculation logic moved to `BirthdayEventHandler` (Strategy Pattern - Story 1.5). Use `BirthdayEventHandler.calculateNextOccurrence(user)` instead of `user.calculateNextBirthday()`.
+**Note:** Birthday calculation logic moved to `BirthdayEventHandler` (Strategy Pattern - Story 1.5). Use `BirthdayEventHandler.calculateNextOccurrence(user)` instead of `user.calculateNextBirthday()`. Delivery time is configurable via constructor (defaults to 9:00 AM) - see `src/modules/event-scheduling/config/event-delivery-times.ts` (Story 2.9b).
 
 ---
 

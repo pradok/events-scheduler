@@ -350,6 +350,175 @@ describe('BirthdayEventHandler', () => {
     });
   });
 
+  describe('Configurable Delivery Times', () => {
+    it('should use configured delivery time instead of default 9:00 AM', () => {
+      // Arrange
+      const customConfig = { hour: 15, minute: 30 }; // 3:30 PM
+      const customHandler = new BirthdayEventHandler(customConfig);
+      const user = new User({
+        id: 'user-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-03-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2025-01-01T12:00:00', {
+        zone: 'UTC',
+      });
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2025-03-15');
+      expect(nextBirthday.hour).toBe(15);
+      expect(nextBirthday.minute).toBe(30);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('America/New_York');
+    });
+
+    it('should use default 9:00 AM when no config provided', () => {
+      // Arrange
+      const defaultHandler = new BirthdayEventHandler(); // No config
+      const user = new User({
+        id: 'user-1',
+        firstName: 'Jane',
+        lastName: 'Smith',
+        dateOfBirth: new DateOfBirth('1985-06-20'),
+        timezone: new Timezone('Europe/London'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2025-01-01T12:00:00', {
+        zone: 'UTC',
+      });
+
+      // Act
+      const nextBirthday = defaultHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2025-06-20');
+      expect(nextBirthday.hour).toBe(9);
+      expect(nextBirthday.minute).toBe(0);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('Europe/London');
+    });
+
+    it('should respect configured minute offset', () => {
+      // Arrange
+      const customConfig = { hour: 9, minute: 15 }; // 9:15 AM
+      const customHandler = new BirthdayEventHandler(customConfig);
+      const user = new User({
+        id: 'user-1',
+        firstName: 'Yuki',
+        lastName: 'Tanaka',
+        dateOfBirth: new DateOfBirth('1992-11-05'),
+        timezone: new Timezone('Asia/Tokyo'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2025-01-01T12:00:00', {
+        zone: 'UTC',
+      });
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2025-11-05');
+      expect(nextBirthday.hour).toBe(9);
+      expect(nextBirthday.minute).toBe(15);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('Asia/Tokyo');
+    });
+
+    it('should work with midnight delivery time (0:00)', () => {
+      // Arrange
+      const midnightConfig = { hour: 0, minute: 0 }; // Midnight
+      const customHandler = new BirthdayEventHandler(midnightConfig);
+      const user = new User({
+        id: 'user-1',
+        firstName: 'Alex',
+        lastName: 'Wilson',
+        dateOfBirth: new DateOfBirth('1988-09-12'),
+        timezone: new Timezone('Australia/Sydney'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2025-01-01T12:00:00', {
+        zone: 'UTC',
+      });
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2025-09-12');
+      expect(nextBirthday.hour).toBe(0);
+      expect(nextBirthday.minute).toBe(0);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('Australia/Sydney');
+    });
+
+    it('should work with late night delivery time (23:59)', () => {
+      // Arrange
+      const lateNightConfig = { hour: 23, minute: 59 }; // 11:59 PM
+      const customHandler = new BirthdayEventHandler(lateNightConfig);
+      const user = new User({
+        id: 'user-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: new DateOfBirth('1990-03-15'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2025-01-01T12:00:00', {
+        zone: 'UTC',
+      });
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2025-03-15');
+      expect(nextBirthday.hour).toBe(23);
+      expect(nextBirthday.minute).toBe(59);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('America/New_York');
+    });
+
+    it('should use configured time for leap year birthdays', () => {
+      // Arrange
+      const customConfig = { hour: 14, minute: 45 }; // 2:45 PM
+      const customHandler = new BirthdayEventHandler(customConfig);
+      const user = new User({
+        id: 'user-1',
+        firstName: 'Leap',
+        lastName: 'Year',
+        dateOfBirth: new DateOfBirth('2000-02-29'),
+        timezone: new Timezone('America/New_York'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+      const referenceDate = DateTime.fromISO('2024-01-01T12:00:00', {
+        zone: 'UTC',
+      }); // 2024 is a leap year
+
+      // Act
+      const nextBirthday = customHandler.calculateNextOccurrence(toUserInfo(user), referenceDate);
+
+      // Assert
+      expect(nextBirthday.toISODate()).toBe('2024-02-29');
+      expect(nextBirthday.hour).toBe(14);
+      expect(nextBirthday.minute).toBe(45);
+      expect(nextBirthday.second).toBe(0);
+      expect(nextBirthday.zoneName).toBe('America/New_York');
+    });
+  });
+
   describe('Domain Layer Purity', () => {
     it('should have no infrastructure dependencies', () => {
       // Arrange & Act - BirthdayEventHandler should be pure domain logic

@@ -1,12 +1,16 @@
 import { DateTime } from 'luxon';
 import { IEventHandler } from './IEventHandler';
 import { UserInfo } from '../../../application/types/UserInfo';
+import {
+  EventDeliveryTimeConfig,
+  EVENT_DELIVERY_TIMES,
+} from '../../../config/event-delivery-times';
 
 /**
  * BirthdayEventHandler - Strategy implementation for birthday-specific domain logic
  *
  * Handles birthday-specific domain rules:
- * - Calculates when next birthday occurs (9:00 AM local time)
+ * - Calculates when next birthday occurs (configurable delivery time, defaults to 9:00 AM local time)
  * - Formats birthday message content
  *
  * This is a concrete strategy in the Strategy Pattern, allowing the system
@@ -21,16 +25,32 @@ import { UserInfo } from '../../../application/types/UserInfo';
  * Event entity creation/orchestration is handled by CreateBirthdayEventUseCase.
  * Timezone conversions are handled by TimezoneService in the use case layer.
  * See: event-handlers-vs-use-cases.md for rationale.
+ *
+ * **Configurable Delivery Time:**
+ * Delivery time is configurable via constructor to enable:
+ * - Fast test execution (no waiting until 9:00 AM)
+ * - Future support for different event types with different delivery times
+ * - Production uses default 9:00 AM (business requirement)
  */
 export class BirthdayEventHandler implements IEventHandler {
   public readonly eventType = 'BIRTHDAY';
 
   /**
-   * Calculate the next birthday occurrence at 9:00 AM local time
+   * Creates a BirthdayEventHandler with configurable delivery time
+   *
+   * @param config - Delivery time configuration (hour and minute in user's local time)
+   *                 Defaults to 9:00 AM per business requirements
+   */
+  public constructor(
+    private readonly config: EventDeliveryTimeConfig = EVENT_DELIVERY_TIMES.BIRTHDAY
+  ) {}
+
+  /**
+   * Calculate the next birthday occurrence at configured delivery time (default 9:00 AM local time)
    *
    * @param userInfo - User data (dateOfBirth in ISO format, timezone in IANA format)
    * @param referenceDate - The reference date (defaults to now)
-   * @returns DateTime representing next birthday at 9:00 AM in user's timezone
+   * @returns DateTime representing next birthday at configured time in user's timezone
    */
   public calculateNextOccurrence(
     userInfo: UserInfo,
@@ -81,7 +101,7 @@ export class BirthdayEventHandler implements IEventHandler {
   }
 
   /**
-   * Creates a birthday DateTime at 9:00 AM local time for the given year
+   * Creates a birthday DateTime at configured delivery time (default 9:00 AM) local time for the given year
    * Handles leap year birthdays (Feb 29) by using Feb 28 in non-leap years
    *
    * @private
@@ -106,8 +126,8 @@ export class BirthdayEventHandler implements IEventHandler {
       year,
       month: targetMonth,
       day: targetDay,
-      hour: 9,
-      minute: 0,
+      hour: this.config.hour,
+      minute: this.config.minute,
       second: 0,
       millisecond: 0,
     });
