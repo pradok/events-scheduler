@@ -7,6 +7,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.test.ts',
+    '!src/__tests__/**/*.ts',
     '!src/index.ts',
     '!src/domain/schemas/**/*.ts', // Schemas are for type derivation, no runtime logic to test
   ],
