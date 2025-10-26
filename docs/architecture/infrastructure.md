@@ -678,13 +678,25 @@ PENDING ──────> PROCESSING ──────> COMPLETED
 | Component | Local Development | Production (AWS) |
 |-----------|-------------------|------------------|
 | Scheduler Lambda | ✅ Deployed | ✅ Deployed |
-| Worker Lambda | ❌ Not deployed* | ✅ Deployed |
+| Worker Lambda | ✅ Deployed | ✅ Deployed |
 | SQS Queue | ✅ Created | ✅ Created |
+| SQS Event Source Mapping | ✅ Configured | ✅ Configured |
 | EventBridge Rule | ✅ Created | ✅ Created |
 
-_*Worker Lambda not deployed to LocalStack because integration tests provide full coverage by invoking the handler directly._
+**Deployment Commands:**
 
-**See:** [LocalStack Setup](./localstack-setup.md) for deployment commands
+```bash
+# Build both Lambdas
+npm run lambda:build
+
+# Deploy both Lambdas to LocalStack
+npm run lambda:deploy:localstack
+
+# Verify deployment
+docker exec bday-localstack awslocal lambda list-functions
+```
+
+**See:** [LocalStack Setup](./localstack-setup.md) for detailed setup and debugging
 
 ---
 
