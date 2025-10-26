@@ -41,7 +41,23 @@
 
 ---
 
-## Story 3.3: Basic End-to-End Smoke Test
+## Story 3.3: Recovery on System Startup (Simplified)
+
+**As a** developer,
+**I want** recovery to run automatically when the system starts,
+**so that** no manual intervention is required after downtime.
+
+**Acceptance Criteria:**
+
+1. Application startup hook calls RecoveryService.execute()
+2. Startup hook logs: "Recovery check complete" or "No missed events found"
+3. Startup hook handles errors gracefully (logs error, allows system to continue)
+4. Docker Compose restart triggers recovery automatically
+5. Integration test simulates downtime and restart, verifies recovery runs
+
+---
+
+## Story 3.4: Basic End-to-End Smoke Test
 
 **As a** developer,
 **I want** one end-to-end test proving the complete system works,
@@ -57,19 +73,3 @@
 6. Test uses real LocalStack (SQS for worker, EventBridge for scheduler)
 7. Test uses real mock webhook server to verify delivery
 8. Test passes consistently without flaky behavior
-
----
-
-## Story 3.4: Recovery on System Startup (Simplified)
-
-**As a** developer,
-**I want** recovery to run automatically when the system starts,
-**so that** no manual intervention is required after downtime.
-
-**Acceptance Criteria:**
-
-1. Application startup hook calls RecoveryService.execute()
-2. Startup hook logs: "Recovery check complete" or "No missed events found"
-3. Startup hook handles errors gracefully (logs error, allows system to continue)
-4. Docker Compose restart triggers recovery automatically
-5. Integration test simulates downtime and restart, verifies recovery runs
