@@ -9,6 +9,7 @@ import { IdempotencyKey } from '../../domain/value-objects/IdempotencyKey';
 import { Timezone } from '@shared/value-objects/Timezone';
 import { UserInfo } from '../types/UserInfo';
 import { CreateBirthdayEventDTO, CreateBirthdayEventSchema } from '../dtos/CreateBirthdayEventDTO';
+import { IWebhookConfig } from '../../config/webhook-config';
 
 /**
  * Use Case: Create a birthday event for a user
@@ -50,7 +51,8 @@ export class CreateBirthdayEventUseCase {
   public constructor(
     private readonly eventRepository: IEventRepository,
     private readonly timezoneService: TimezoneService,
-    private readonly eventHandlerRegistry: EventHandlerRegistry
+    private readonly eventHandlerRegistry: EventHandlerRegistry,
+    private readonly webhookConfig: IWebhookConfig
   ) {}
 
   /**
@@ -98,6 +100,8 @@ export class CreateBirthdayEventUseCase {
     const idempotencyKey = IdempotencyKey.generate(validatedDto.userId, nextBirthdayUTC);
 
     // Step 7: Create Event entity
+    const webhookUrl = this.webhookConfig.getWebhookUrl(validatedDto.userId, 'BIRTHDAY');
+
     const birthdayEvent = new Event({
       id: randomUUID(),
       userId: validatedDto.userId,
@@ -109,6 +113,7 @@ export class CreateBirthdayEventUseCase {
       idempotencyKey,
       deliveryPayload: {
         message: handler.formatMessage(userInfo),
+        webhookUrl,
       },
       version: 1,
       retryCount: 0,

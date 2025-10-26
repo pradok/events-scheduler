@@ -31,9 +31,8 @@ describe('WebhookAdapter', () => {
     // This is cleaner than mocking axios.create itself
     mockPost = jest.spyOn(axios.Axios.prototype, 'post');
 
-    // Create adapter - it will call axios.create() which creates an Axios instance
-    // with the mocked post method
-    adapter = new WebhookAdapter(webhookUrl);
+    // Create adapter - webhook URL now comes from payload
+    adapter = new WebhookAdapter();
   });
 
   afterEach(() => {
@@ -43,6 +42,7 @@ describe('WebhookAdapter', () => {
 
   const validPayload: WebhookPayload = {
     message: "Hey, John Doe it's your birthday",
+    webhookUrl: webhookUrl,
   };
   const idempotencyKey = 'evt-123-456';
 

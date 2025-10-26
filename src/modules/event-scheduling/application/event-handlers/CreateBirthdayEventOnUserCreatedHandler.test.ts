@@ -9,6 +9,7 @@ import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { CreateBirthdayEventUseCase } from '../use-cases/CreateBirthdayEventUseCase';
 import { logger } from '../../../../shared/logger';
+import { StaticWebhookConfig } from '../../config/webhook-config';
 
 describe('CreateBirthdayEventOnUserCreatedHandler', () => {
   let handler: CreateBirthdayEventOnUserCreatedHandler;
@@ -34,10 +35,12 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
     eventHandlerRegistry.register(new BirthdayEventHandler());
 
     // Create use case
+    const webhookConfig = new StaticWebhookConfig('https://webhook.test/endpoint');
     createBirthdayEventUseCase = new CreateBirthdayEventUseCase(
       mockEventRepository,
       timezoneService,
-      eventHandlerRegistry
+      eventHandlerRegistry,
+      webhookConfig
     );
 
     // Create handler (thin adapter)
@@ -157,6 +160,7 @@ describe('CreateBirthdayEventOnUserCreatedHandler', () => {
       expect(createdEvent).toBeDefined();
       expect(createdEvent.deliveryPayload).toEqual({
         message: "Hey, Jane Smith it's your birthday",
+        webhookUrl: 'https://webhook.test/endpoint',
       });
     });
 

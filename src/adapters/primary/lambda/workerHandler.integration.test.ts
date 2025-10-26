@@ -50,7 +50,10 @@ describe('workerHandler - Integration Tests', () => {
           metadata: {
             userId: '660e8400-e29b-41d4-a716-446655440001',
             targetTimestampUTC: DateTime.now().toISO(),
-            deliveryPayload: { message: 'Test message' },
+            deliveryPayload: {
+              message: 'Test message',
+              webhookUrl: webhookUrl,
+            },
           },
         }),
         attributes: {
@@ -140,14 +143,20 @@ describe('workerHandler - Integration Tests', () => {
           targetTimestampLocal: DateTime.now().minus({ minutes: 5 }).toJSDate(),
           targetTimezone: 'America/New_York',
           idempotencyKey: 'test-key-001',
-          deliveryPayload: { message: 'Happy Birthday, John Doe!' },
+          deliveryPayload: {
+            message: 'Happy Birthday, John Doe!',
+            webhookUrl: webhookUrl,
+          },
           version: 2, // Version incremented when claimed
         },
       });
 
       // Arrange: Mock successful webhook response
       nock('https://test.webhook.com')
-        .post('/events', { message: 'Happy Birthday, John Doe!' })
+        .post('/events', {
+          message: 'Happy Birthday, John Doe!',
+          webhookUrl: webhookUrl,
+        })
         .reply(200, { success: true, timestamp: DateTime.now().toISO() });
 
       // Arrange: Create SQS event
@@ -195,7 +204,10 @@ describe('workerHandler - Integration Tests', () => {
             targetTimestampLocal: DateTime.now().minus({ minutes: 5 }).toJSDate(),
             targetTimezone: 'Europe/London',
             idempotencyKey: `test-key-00${i}`,
-            deliveryPayload: { message: `Message ${i}` },
+            deliveryPayload: {
+              message: `Message ${i}`,
+              webhookUrl: webhookUrl,
+            },
             version: 2,
           },
         });
@@ -205,7 +217,10 @@ describe('workerHandler - Integration Tests', () => {
       // Arrange: Mock successful webhook responses
       for (let i = 0; i < 3; i++) {
         nock('https://test.webhook.com')
-          .post('/events', { message: `Message ${i}` })
+          .post('/events', {
+            message: `Message ${i}`,
+            webhookUrl: webhookUrl,
+          })
           .reply(200, { success: true });
       }
 
@@ -244,7 +259,10 @@ describe('workerHandler - Integration Tests', () => {
               metadata: {
                 userId: '660e8400-e29b-41d4-a716-446655440001',
                 targetTimestampUTC: DateTime.now().toISO(),
-                deliveryPayload: { message: 'Test' },
+                deliveryPayload: {
+                  message: 'Test',
+                  webhookUrl: webhookUrl,
+                },
               },
             }),
             attributes: {
@@ -291,14 +309,20 @@ describe('workerHandler - Integration Tests', () => {
           targetTimestampLocal: DateTime.now().minus({ minutes: 5 }).toJSDate(),
           targetTimezone: 'America/Chicago',
           idempotencyKey: 'test-key-002',
-          deliveryPayload: { message: 'Happy Birthday, Bob!' },
+          deliveryPayload: {
+            message: 'Happy Birthday, Bob!',
+            webhookUrl: webhookUrl,
+          },
           version: 2,
         },
       });
 
       // Arrange: Mock 404 webhook response (permanent failure)
       nock('https://test.webhook.com')
-        .post('/events', { message: 'Happy Birthday, Bob!' })
+        .post('/events', {
+          message: 'Happy Birthday, Bob!',
+          webhookUrl: webhookUrl,
+        })
         .reply(404, { error: 'Endpoint not found' });
 
       // Arrange: Create SQS event
@@ -343,7 +367,10 @@ describe('workerHandler - Integration Tests', () => {
           targetTimestampLocal: DateTime.now().minus({ minutes: 5 }).toJSDate(),
           targetTimezone: 'America/Los_Angeles',
           idempotencyKey: 'test-key-003',
-          deliveryPayload: { message: 'Happy Birthday, Alice!' },
+          deliveryPayload: {
+            message: 'Happy Birthday, Alice!',
+            webhookUrl: webhookUrl,
+          },
           version: 2,
         },
       });
@@ -351,7 +378,10 @@ describe('workerHandler - Integration Tests', () => {
       // Arrange: Mock 503 webhook response (transient failure)
       // WebhookAdapter retries 3 times, so mock all attempts
       nock('https://test.webhook.com')
-        .post('/events', { message: 'Happy Birthday, Alice!' })
+        .post('/events', {
+          message: 'Happy Birthday, Alice!',
+          webhookUrl: webhookUrl,
+        })
         .times(4)
         .reply(503, { error: 'Service unavailable' });
 

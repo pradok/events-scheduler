@@ -7,6 +7,7 @@ import { BirthdayEventHandler } from '../../domain/services/event-handlers/Birth
 import { CreateBirthdayEventDTO } from '../dtos/CreateBirthdayEventDTO';
 import { EventStatus } from '../../domain/value-objects/EventStatus';
 import { ZodError } from 'zod';
+import { StaticWebhookConfig } from '../../config/webhook-config';
 
 describe('CreateBirthdayEventUseCase', () => {
   let useCase: CreateBirthdayEventUseCase;
@@ -31,10 +32,12 @@ describe('CreateBirthdayEventUseCase', () => {
     eventHandlerRegistry.register(new BirthdayEventHandler());
 
     // Create use case
+    const webhookConfig = new StaticWebhookConfig('https://webhook.test/endpoint');
     useCase = new CreateBirthdayEventUseCase(
       mockEventRepository,
       timezoneService,
-      eventHandlerRegistry
+      eventHandlerRegistry,
+      webhookConfig
     );
   });
 

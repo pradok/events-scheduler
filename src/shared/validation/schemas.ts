@@ -213,6 +213,7 @@ export type SQSMessagePayload = z.infer<typeof SQSMessagePayloadSchema>;
 // eslint-disable-next-line @typescript-eslint/naming-convention -- Zod schemas use PascalCase by convention
 export const WebhookPayloadSchema = z.object({
   message: z.string().min(1, 'Message is required'),
+  webhookUrl: z.string().url('Webhook URL must be a valid URL'),
 });
 
 /**

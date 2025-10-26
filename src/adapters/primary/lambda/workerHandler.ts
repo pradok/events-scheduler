@@ -86,7 +86,7 @@ export async function handler(event: SQSEvent): Promise<void> {
   const prisma = getPrismaClient();
   const eventRepository = new PrismaEventRepository(prisma);
   const userRepository = new PrismaUserRepository(prisma);
-  const webhookClient = new WebhookAdapter(process.env.WEBHOOK_TEST_URL!);
+  const webhookClient = new WebhookAdapter(); // Webhook URL now comes from event payload
   const birthdayEventHandler = new BirthdayEventHandler();
   const timezoneService = new TimezoneService();
   const executeEventUseCase = new ExecuteEventUseCase(

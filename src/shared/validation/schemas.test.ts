@@ -11,6 +11,7 @@ describe('WebhookPayloadSchema', () => {
     it('should validate a valid webhook payload with message', () => {
       const validPayload = {
         message: "Hey, John Doe it's your birthday",
+        webhookUrl: 'https://webhook.test/endpoint',
       };
 
       const result = WebhookPayloadSchema.safeParse(validPayload);
@@ -18,12 +19,14 @@ describe('WebhookPayloadSchema', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.message).toBe("Hey, John Doe it's your birthday");
+        expect(result.data.webhookUrl).toBe('https://webhook.test/endpoint');
       }
     });
 
     it('should validate payload with long message', () => {
       const validPayload = {
         message: 'A'.repeat(1000), // Long message
+        webhookUrl: 'https://webhook.test/endpoint',
       };
 
       const result = WebhookPayloadSchema.safeParse(validPayload);
@@ -34,11 +37,13 @@ describe('WebhookPayloadSchema', () => {
     it('should derive correct TypeScript type', () => {
       const payload: WebhookPayload = {
         message: 'Test message',
+        webhookUrl: 'https://webhook.test/endpoint',
       };
 
       // Type assertion to ensure correct type inference
       const validated = WebhookPayloadSchema.parse(payload);
       expect(validated.message).toBe('Test message');
+      expect(validated.webhookUrl).toBe('https://webhook.test/endpoint');
     });
   });
 
@@ -95,6 +100,7 @@ describe('WebhookPayloadSchema', () => {
     it('should ignore additional fields (allowing future extensibility)', () => {
       const payloadWithExtraFields = {
         message: "Hey, John Doe it's your birthday",
+        webhookUrl: 'https://webhook.test/endpoint',
         extraField: 'should be stripped',
         anotherField: 123,
       };
@@ -104,7 +110,10 @@ describe('WebhookPayloadSchema', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         // Zod strips unknown fields by default
-        expect(result.data).toEqual({ message: "Hey, John Doe it's your birthday" });
+        expect(result.data).toEqual({
+          message: "Hey, John Doe it's your birthday",
+          webhookUrl: 'https://webhook.test/endpoint',
+        });
       }
     });
   });

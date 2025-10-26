@@ -118,7 +118,10 @@ describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
         retryCount: 0,
         version: 1,
         idempotencyKey,
-        deliveryPayload: { message: 'Happy Birthday Test User!' },
+        deliveryPayload: {
+          message: 'Happy Birthday Test User!',
+          webhookUrl: 'https://webhook.test/endpoint',
+        },
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       });
@@ -171,7 +174,10 @@ describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
         retryCount: 0,
         version: 1,
         idempotencyKey,
-        deliveryPayload: { message: 'Happy Birthday!' },
+        deliveryPayload: {
+          message: 'Happy Birthday!',
+          webhookUrl: 'https://webhook.test/endpoint',
+        },
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       });
@@ -221,7 +227,10 @@ describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
         retryCount: 0,
         version: 1,
         idempotencyKey,
-        deliveryPayload: { message: 'Happy Birthday!' },
+        deliveryPayload: {
+          message: 'Happy Birthday!',
+          webhookUrl: 'https://webhook.test/endpoint',
+        },
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       });
@@ -253,7 +262,10 @@ describe('ExecuteEventUseCase - Integration Tests (Retry Consistency)', () => {
           targetTimestampLocal: targetTime.toJSDate(),
           targetTimezone: 'America/New_York',
           idempotencyKey: idempotencyKey.toString(),
-          deliveryPayload: { message: 'Happy Birthday!' },
+          deliveryPayload: {
+            message: 'Happy Birthday!',
+            webhookUrl: 'https://webhook.test/endpoint',
+          },
           version: 1,
           retryCount: 0,
         },

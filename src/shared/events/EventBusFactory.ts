@@ -11,6 +11,7 @@ import { CreateBirthdayEventOnUserCreatedHandler } from '../../modules/event-sch
 import { CreateBirthdayEventUseCase } from '../../modules/event-scheduling/application/use-cases/CreateBirthdayEventUseCase';
 import { RescheduleBirthdayEventsUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleBirthdayEventsUseCase';
 import { RescheduleEventsOnTimezoneChangeUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleEventsOnTimezoneChangeUseCase';
+import { webhookConfig } from '../../modules/event-scheduling/config/webhook-config';
 
 /**
  * Factory function to create and configure the event bus with all handlers
@@ -31,7 +32,8 @@ export function createEventBus(prisma: PrismaClient): InMemoryEventBus {
   const createBirthdayEventUseCase = new CreateBirthdayEventUseCase(
     eventRepository,
     timezoneService,
-    eventHandlerRegistry
+    eventHandlerRegistry,
+    webhookConfig
   );
   const rescheduleBirthdayEventsUseCase = new RescheduleBirthdayEventsUseCase(
     eventRepository,

@@ -38,9 +38,10 @@ export class WebhookAdapter implements IWebhookClient {
   /**
    * Creates a new WebhookAdapter instance
    *
-   * @param webhookUrl - Target webhook endpoint URL (from WEBHOOK_TEST_URL env var)
+   * Webhook URL is now read from payload (per-event configuration)
+   * instead of constructor (global configuration).
    */
-  public constructor(private readonly webhookUrl: string) {
+  public constructor() {
     // Create Axios instance with default configuration
     this.axiosInstance = axios.create({
       timeout: 10000, // 10 seconds
@@ -68,11 +69,11 @@ export class WebhookAdapter implements IWebhookClient {
         // Do NOT retry on 4xx client errors (permanent failures)
         return false;
       },
-      onRetry: (retryCount: number, error: AxiosError): void => {
+      onRetry: (retryCount: number, error: AxiosError, config): void => {
         logger.warn({
           msg: 'Webhook delivery retry attempt',
           retryCount,
-          url: this.webhookUrl,
+          url: config.url,
           statusCode: error.response?.status,
           error: error.message,
         });
@@ -95,18 +96,21 @@ export class WebhookAdapter implements IWebhookClient {
     const startTime = Date.now();
 
     // Validate payload before sending (throws ZodError if invalid)
-    WebhookPayloadSchema.parse(payload);
+    const validatedPayload = WebhookPayloadSchema.parse(payload);
+
+    // Extract webhook URL from payload
+    const webhookUrl = validatedPayload.webhookUrl;
 
     logger.info({
       msg: 'Webhook delivery started',
-      url: this.webhookUrl,
+      url: webhookUrl,
       idempotencyKey,
       payloadSize: JSON.stringify(payload).length,
     });
 
     try {
       // Send HTTP POST request with idempotency header
-      const response = await this.axiosInstance.post(this.webhookUrl, payload, {
+      const response = await this.axiosInstance.post(webhookUrl, payload, {
         headers: {
           'X-Idempotency-Key': idempotencyKey,
         },
@@ -119,7 +123,7 @@ export class WebhookAdapter implements IWebhookClient {
 
       logger.info({
         msg: 'Webhook delivery succeeded',
-        url: this.webhookUrl,
+        url: webhookUrl,
         idempotencyKey,
         statusCode: response.status,
         durationMs: duration,
@@ -144,7 +148,7 @@ export class WebhookAdapter implements IWebhookClient {
         // Log failure details
         logger.error({
           msg: 'Webhook delivery failed',
-          url: this.webhookUrl,
+          url: webhookUrl,
           idempotencyKey,
           error: axiosErr.message,
           stack: axiosErr.stack,
@@ -167,7 +171,7 @@ export class WebhookAdapter implements IWebhookClient {
       // Handle non-Axios errors (e.g., Zod validation errors)
       logger.error({
         msg: 'Webhook delivery failed with unexpected error',
-        url: this.webhookUrl,
+        url: webhookUrl,
         idempotencyKey,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,

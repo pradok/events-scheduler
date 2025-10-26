@@ -117,7 +117,10 @@ describe('ExecuteEventUseCase', () => {
 
       it('should include correct payload and idempotency key in webhook delivery', async () => {
         // Arrange
-        const payload: WebhookPayload = { message: "Hey, John Doe it's your birthday" };
+        const payload: WebhookPayload = {
+          message: "Hey, John Doe it's your birthday",
+          webhookUrl: 'https://webhook.test/endpoint',
+        };
         const idempotencyKey = IdempotencyKey.generate('user-123', DateTime.now());
         const event = createMockEvent({
           deliveryPayload: payload,
@@ -485,7 +488,10 @@ describe('ExecuteEventUseCase', () => {
 
       it('should log webhook delivery attempt with payload', async () => {
         // Arrange
-        const payload: WebhookPayload = { message: 'Test message' };
+        const payload: WebhookPayload = {
+          message: 'Test message',
+          webhookUrl: 'https://webhook.test/endpoint',
+        };
         const event = createMockEvent({
           status: EventStatus.PROCESSING,
           deliveryPayload: payload,
@@ -775,7 +781,10 @@ function createMockEvent(overrides: Partial<Event> = {}): Event {
     retryCount: 0,
     version: 1,
     idempotencyKey: IdempotencyKey.generate(userId, now),
-    deliveryPayload: { message: "Hey, John Doe it's your birthday" },
+    deliveryPayload: {
+      message: "Hey, John Doe it's your birthday",
+      webhookUrl: 'https://webhook.test/endpoint',
+    },
     createdAt: now.minus({ days: 1 }),
     updatedAt: now.minus({ days: 1 }),
     ...overrides,
