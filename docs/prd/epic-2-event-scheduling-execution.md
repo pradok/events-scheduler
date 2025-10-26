@@ -192,6 +192,34 @@
 
 ---
 
+## Story 2.9b: Configurable Event Delivery Times
+
+**As a** developer,
+**I want** event delivery times to be configurable instead of hardcoded,
+**so that** I can easily test events without waiting until 9:00 AM and support different event types with different delivery times in the future.
+
+**Acceptance Criteria:**
+
+1. Delivery time (hour and minute) is configurable via code constants (not hardcoded in BirthdayEventHandler)
+2. BirthdayEventHandler accepts delivery time configuration via constructor (defaults to 9:00 AM)
+3. Configuration file defines delivery times for all event types (BIRTHDAY: 9:00 AM)
+4. All existing unit tests pass without modification (default behavior unchanged)
+5. New unit tests verify custom delivery times work correctly
+6. Integration tests can override delivery time for fast test execution
+
+**Implementation:**
+
+- Configuration file: `src/modules/event-scheduling/config/event-delivery-times.ts`
+- BirthdayEventHandler constructor accepts `EventDeliveryTimeConfig` parameter
+- Default parameter value maintains backward compatibility (9:00 AM)
+- Tests can create handler with custom config: `new BirthdayEventHandler({ hour: 15, minute: 30 })`
+
+**Testing Benefit:**
+
+E2E tests (Story 2.10) can now schedule events for "25 seconds from now" instead of hardcoded 9:00 AM, enabling fast, realistic test execution without time mocking or artificial "overdue" events.
+
+---
+
 ## Story 2.10: End-to-End Scheduling Flow Test
 
 **As a** developer,
@@ -200,14 +228,16 @@
 
 **Acceptance Criteria:**
 
-1. E2E test creates user with birthday tomorrow
-2. Test advances time to trigger event (using time mocking or fast-forward)
+1. E2E test creates user with birthday and event scheduled for near future (using Story 2.9b configurable delivery times)
+2. Test waits in real-time for event to become ready (no time mocking needed)
 3. Test verifies scheduler finds and claims event
 4. Test verifies event sent to SQS queue
 5. Test verifies worker processes message and delivers webhook
 6. Test verifies event status updated to COMPLETED
 7. Test verifies next year's event was created
 8. Test completes in <30 seconds with all assertions passing
+
+**Note:** Story 2.9b (Configurable Event Delivery Times) enables this E2E test to schedule events 20-30 seconds from now instead of hardcoded 9:00 AM. This eliminates the need for time mocking or creating artificial "overdue" events, resulting in cleaner, more realistic test scenarios.
 
 ---
 
