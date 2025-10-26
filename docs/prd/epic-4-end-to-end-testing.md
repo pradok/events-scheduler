@@ -156,11 +156,13 @@
 
 ---
 
-## Story 4.6: Comprehensive End-to-End Smoke Test (Moved from Epic 3)
+## Story 4.6: Comprehensive End-to-End Smoke Test
 
 **As a** developer,
 **I want** one end-to-end test proving the complete system works,
 **so that** I can confidently demo the MVP and know all components integrate correctly.
+
+**Note:** This story was originally Story 3.4 in Epic 3, moved here because it requires the E2E testing infrastructure from Stories 4.1-4.5.
 
 **Acceptance Criteria:**
 
