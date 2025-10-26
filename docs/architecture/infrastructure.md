@@ -572,6 +572,122 @@ Automatic rollback triggered when:
 
 ---
 
+## Event Scheduling Lambda Architecture
+
+The system uses a **two-Lambda producer-consumer pattern** for event scheduling and execution:
+
+### Architecture Overview
+
+```text
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│  EventBridge │──────>│   Scheduler  │──────>│  SQS Queue   │──────>│    Worker    │
+│  (1 minute)  │       │    Lambda    │       │ (events-queue│       │    Lambda    │
+└──────────────┘       └──────────────┘       └──────────────┘       └──────────────┘
+                              │                                              │
+                              ▼                                              ▼
+                       ┌──────────────┐                              ┌──────────────┐
+                       │   Database   │                              │   Webhook    │
+                       │ (PostgreSQL) │                              │   Endpoint   │
+                       └──────────────┘                              └──────────────┘
+
+                       Claims events:                               Delivers messages:
+                       PENDING → PROCESSING                         PROCESSING → COMPLETED
+```
+
+### 1. Scheduler Lambda (`event-scheduler`)
+
+**Purpose:** Polls database for ready events and queues them for execution
+
+**Trigger:** EventBridge (every 1 minute)
+
+**Workflow:**
+
+1. Queries database: `targetTimestampUTC <= NOW() AND status = 'PENDING'`
+2. Claims events atomically using `FOR UPDATE SKIP LOCKED`
+3. Updates claimed events to `PROCESSING` status
+4. Sends event details to SQS queue (`events-queue`)
+5. Returns summary (events found, events claimed, errors)
+
+**Code:** `src/adapters/primary/lambda/schedulerHandler.ts`
+
+**Key Features:**
+
+- Atomic claiming prevents race conditions
+- Handles batch processing (100 events per run)
+- Idempotent (safe to run multiple times)
+- Graceful error handling with logging
+
+### 2. Worker Lambda (`event-worker`)
+
+**Purpose:** Processes queued events and delivers birthday messages
+
+**Trigger:** SQS queue (`events-queue`) - batch size 10 messages
+
+**Workflow:**
+
+1. Receives batch of up to 10 messages from SQS
+2. Validates message payload against schema
+3. For each message:
+   - Retrieves event from database (validates status = `PROCESSING`)
+   - Delivers birthday message via webhook (HTTP POST)
+   - Updates event status to `COMPLETED` on success
+   - Generates next year's birthday event
+4. Error handling:
+   - **Permanent failures (4xx):** Mark `FAILED`, delete message
+   - **Transient failures (5xx):** Leave `PROCESSING`, message reappears
+   - **Invalid payloads:** Send to Dead Letter Queue
+
+**Code:** `src/adapters/primary/lambda/workerHandler.ts`
+
+**Key Features:**
+
+- Batch processing (10 messages per invocation)
+- Retry logic with exponential backoff
+- Idempotency via event status validation
+- Annual recurrence (generates next year's event)
+
+### Event Status Transitions
+
+```text
+PENDING ──────> PROCESSING ──────> COMPLETED
+                     │                  │
+                     │                  ├─> (Next year event: PENDING)
+                     │
+                     └──────> FAILED (permanent errors)
+```
+
+### Why Two Lambdas?
+
+**Separation of Concerns:**
+
+- **Scheduler:** Fast, predictable execution (polling + claiming)
+- **Worker:** Variable execution time (webhook calls, retries)
+
+**Scalability:**
+
+- **Scheduler:** Low concurrency (1-5 instances)
+- **Worker:** High concurrency (10-100 instances based on queue depth)
+
+**Reliability:**
+
+- **Scheduler failures:** Events remain in database for next poll
+- **Worker failures:** SQS retries automatically (up to 3 attempts)
+
+### LocalStack Deployment Status
+
+| Component | Local Development | Production (AWS) |
+|-----------|-------------------|------------------|
+| Scheduler Lambda | ✅ Deployed | ✅ Deployed |
+| Worker Lambda | ❌ Not deployed* | ✅ Deployed |
+| SQS Queue | ✅ Created | ✅ Created |
+| EventBridge Rule | ✅ Created | ✅ Created |
+
+_*Worker Lambda not deployed to LocalStack because integration tests provide full coverage by invoking the handler directly._
+
+**See:** [LocalStack Setup](./localstack-setup.md) for deployment commands
+
+---
+
 ## Scheduler Deployment Options
 
 The event scheduler component can be deployed in different architectures depending on scale, cost, and operational requirements. All deployment options use the **Distributed Scheduler Pattern** with PostgreSQL row-level locking (`FOR UPDATE SKIP LOCKED`) to prevent duplicate event processing.

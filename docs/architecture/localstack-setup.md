@@ -1,4 +1,4 @@
-# LocalStack Setup and Architecture
+# LocalStack Setup and Debugging Guide
 
 ## Overview
 
@@ -13,76 +13,7 @@ LocalStack simulates AWS services for local development and testing, enabling de
 - **EventBridge** - Scheduled triggers (cron-like scheduling)
 - **IAM** - Roles and permissions (minimal in LocalStack)
 
-## Lambda Architecture
-
-The system uses **two Lambda functions** in a producer-consumer pattern:
-
-### 1. Scheduler Lambda (`event-scheduler`)
-
-**Purpose:** Polls database for ready events and queues them for execution
-
-**Trigger:** EventBridge (every 1 minute)
-
-**Workflow:**
-
-1. Queries database for events where `targetTimestampUTC <= NOW() AND status = 'PENDING'`
-2. Claims events atomically using `FOR UPDATE SKIP LOCKED` (prevents race conditions)
-3. Updates claimed events to `PROCESSING` status
-4. Sends event details to SQS queue (`events-queue`)
-5. Returns summary (events found, events claimed, errors)
-
-**Code:** `src/adapters/primary/lambda/schedulerHandler.ts`
-
-**Deployment Status:** ✅ Deployed to LocalStack via `npm run lambda:all`
-
-### 2. Worker Lambda (`event-worker`)
-
-**Purpose:** Processes events from queue and delivers birthday messages via webhook
-
-**Trigger:** SQS queue (`events-queue`) - batch size 10 messages
-
-**Workflow:**
-
-1. Receives batch of up to 10 messages from SQS
-2. Validates each message payload against schema
-3. For each valid message:
-   - Retrieves event from database (status must be `PROCESSING`)
-   - Delivers birthday message via webhook (POST to configured URL)
-   - Updates event status to `COMPLETED` on success
-   - Generates next year's birthday event (annual recurrence)
-4. Handles errors:
-   - **Permanent failures (4xx):** Mark event `FAILED`, delete message from queue
-   - **Transient failures (5xx, network):** Leave event `PROCESSING`, message reappears after visibility timeout
-   - **Invalid payloads:** Send message to Dead Letter Queue (`events-dlq`)
-
-**Code:** `src/adapters/primary/lambda/workerHandler.ts`
-
-**Deployment Status:** ❌ NOT deployed to LocalStack (tested via integration tests instead)
-
-**Why Not Deployed:**
-
-- Worker Lambda is thoroughly tested in integration tests (Story 2.6)
-- E2E tests can invoke worker handler directly without deployment
-- Deploying both Lambdas adds complexity without additional testing value
-- Integration tests provide 100% code coverage for worker logic
-
-### Event Flow Diagram
-
-```text
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│  EventBridge │──────>│   Scheduler  │──────>│  SQS Queue   │──────>│    Worker    │
-│  (1 minute)  │       │    Lambda    │       │ (events-queue│       │    Lambda    │
-└──────────────┘       └──────────────┘       └──────────────┘       └──────────────┘
-                              │                                              │
-                              ▼                                              ▼
-                       ┌──────────────┐                              ┌──────────────┐
-                       │   Database   │                              │   Webhook    │
-                       │ (PostgreSQL) │                              │   Endpoint   │
-                       └──────────────┘                              └──────────────┘
-
-                       Claims events:                               Delivers messages:
-                       PENDING → PROCESSING                         PROCESSING → COMPLETED
-```
+**Architecture:** See [Event Scheduling Lambda Architecture](./infrastructure.md#event-scheduling-lambda-architecture) for detailed explanation of the two-Lambda producer-consumer pattern.
 
 ## Dual-Purpose LocalStack Pattern
 
