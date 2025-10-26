@@ -55,21 +55,15 @@
 4. Docker Compose restart triggers recovery automatically
 5. Integration test simulates downtime and restart, verifies recovery runs
 
+**Story 3.4 has been moved to Epic 4: End-to-End Testing** (Story 4.6)
+
 ---
 
-## Story 3.4: Basic End-to-End Smoke Test
+## Epic 3 Complete! 🎉
 
-**As a** developer,
-**I want** one end-to-end test proving the complete system works,
-**so that** I can confidently demo the MVP and know all components integrate correctly.
+All recovery and reliability stories have been implemented:
 
-**Acceptance Criteria:**
-
-1. E2E test creates user via API → verifies birthday event generated automatically
-2. Test advances time to event execution time → scheduler claims event → sends to SQS
-3. Test processes SQS message via worker → webhook delivered to test endpoint
-4. Test verifies event status updated to COMPLETED in database
-5. Test uses real database (Testcontainers PostgreSQL)
-6. Test uses real LocalStack (SQS for worker, EventBridge for scheduler)
-7. Test uses real mock webhook server to verify delivery
-8. Test passes consistently without flaky behavior
+- ✅ Story 3.1: Recovery Service - Missed Event Detection
+- ✅ Story 3.2: Recovery Execution
+- ✅ Story 3.3: Recovery on System Startup
+- Story 3.4: Moved to Epic 4 (E2E Testing infrastructure required first)
