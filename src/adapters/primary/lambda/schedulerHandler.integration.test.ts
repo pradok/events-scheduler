@@ -1,4 +1,4 @@
-import { handler } from './schedulerHandler';
+import { handler, __resetRecoveryCheckForTesting } from './schedulerHandler';
 import { PrismaClient } from '@prisma/client';
 import {
   SQSClient,
@@ -118,6 +118,9 @@ describe('schedulerHandler - Integration Tests', () => {
   });
 
   beforeEach(async () => {
+    // Reset recovery check flag (Story 3.3 - recovery runs on cold start)
+    __resetRecoveryCheckForTesting();
+
     // Clean up database before each test
     await prisma.event.deleteMany();
     await prisma.user.deleteMany();

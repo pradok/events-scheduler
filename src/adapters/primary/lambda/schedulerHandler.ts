@@ -5,6 +5,7 @@ import { ClaimReadyEventsUseCase } from '../../../modules/event-scheduling/appli
 import { SQSAdapter } from '../../secondary/messaging/SQSAdapter';
 import { logger } from '../../../shared/logger';
 import type { SQSMessagePayload } from '../../../shared/validation/schemas';
+import { runRecoveryOnStartup } from '../../../startup/recovery-hook';
 
 /**
  * AWS EventBridge scheduled event payload structure.
@@ -29,6 +30,9 @@ interface ScheduledEvent {
 // Singleton Prisma client (reused across Lambda warm starts)
 let prismaClient: PrismaClient | null = null;
 
+// Recovery check flag (runs once per Lambda container lifecycle)
+let recoveryCheckComplete = false;
+
 /**
  * Gets or creates the Prisma client singleton.
  *
@@ -43,6 +47,15 @@ function getPrismaClient(): PrismaClient {
     prismaClient = new PrismaClient();
   }
   return prismaClient;
+}
+
+/**
+ * Reset recovery check flag (for testing purposes only)
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function __resetRecoveryCheckForTesting(): void {
+  recoveryCheckComplete = false;
 }
 
 /**
@@ -79,6 +92,13 @@ function getPrismaClient(): PrismaClient {
  */
 export async function handler(event: ScheduledEvent): Promise<void> {
   const startTime = Date.now();
+
+  // Run recovery once on Lambda cold start (Story 3.3)
+  // Skip in test environment to avoid double-queueing events
+  if (!recoveryCheckComplete && process.env.NODE_ENV !== 'test') {
+    await runRecoveryOnStartup();
+    recoveryCheckComplete = true;
+  }
 
   logger.info({
     msg: 'Scheduler Lambda execution started',

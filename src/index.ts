@@ -43,6 +43,31 @@
  * ```
  */
 
+import { runRecoveryOnStartup } from './startup/recovery-hook';
+
+/**
+ * Main application startup function
+ *
+ * Runs recovery check on startup, then starts the scheduler/API server.
+ *
+ * @see Story 3.3: Recovery on System Startup
+ */
+async function main(): Promise<void> {
+  // Run recovery check on startup
+  await runRecoveryOnStartup();
+
+  // TODO: Start scheduler/API server (future stories)
+  // ... existing scheduler startup code will be added here
+}
+
+// Only run main() if this is the entry point (not during tests)
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Fatal error during startup:', error);
+    process.exit(1);
+  });
+}
+
 const greeting = 'Birthday Event Scheduling System - Project Setup Complete';
 
 export { greeting };
