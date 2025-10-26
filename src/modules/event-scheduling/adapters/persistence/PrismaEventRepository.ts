@@ -216,4 +216,55 @@ export class PrismaEventRepository implements IEventRepository {
       where: { userId },
     });
   }
+
+  /**
+   * Finds missed events that should have executed during system downtime
+   *
+   * **Query Logic:**
+   * Returns events where:
+   * - `status = 'PENDING'` (not yet executed)
+   * - `targetTimestampUTC < NOW()` (should have already fired)
+   * - Ordered by `targetTimestampUTC ASC` (oldest events first)
+   * - Limited to `limit` parameter (prevents memory overflow)
+   *
+   * **Prisma Query Builder Usage:**
+   * This implementation uses Prisma's query builder (NOT raw SQL) because:
+   * - Simple query that Prisma fully supports
+   * - No need for advanced PostgreSQL features (FOR UPDATE, SKIP LOCKED)
+   * - Maintains database abstraction and portability
+   * - Read-only query (no locking required)
+   *
+   * **Why NOT use raw SQL?**
+   * Per coding standards (docs/architecture/coding-standards.md#5-raw-sql-usage-in-prisma-repositories),
+   * raw SQL should only be used when Prisma's query builder cannot express the required operation.
+   * This query is a straightforward WHERE + ORDER BY + LIMIT operation that Prisma handles well.
+   *
+   * **Difference from claimReadyEvents():**
+   * - `claimReadyEvents()`: Uses raw SQL with FOR UPDATE SKIP LOCKED for atomic claiming
+   * - `findMissedEvents()`: Uses Prisma query builder, read-only (no locking)
+   *
+   * @param limit - Maximum number of missed events to return
+   * @returns Promise<Event[]> - Array of missed Event entities ordered by targetTimestampUTC ASC
+   *
+   * @see IEventRepository.findMissedEvents for contract details
+   * @see Story 3.1: Recovery Service - Missed Event Detection
+   */
+  public async findMissedEvents(limit: number): Promise<Event[]> {
+    // Query for PENDING events with targetTimestampUTC in the past
+    const prismaEvents = await this.prisma.event.findMany({
+      where: {
+        status: EventStatus.PENDING,
+        targetTimestampUTC: {
+          lt: new Date(), // Less than NOW()
+        },
+      },
+      orderBy: {
+        targetTimestampUTC: 'asc', // Oldest events first (fair recovery order)
+      },
+      take: limit, // Batch limit to prevent memory overflow
+    });
+
+    // Map Prisma models to domain entities
+    return prismaEvents.map(eventToDomain);
+  }
 }

@@ -43,10 +43,29 @@ export class RescheduleEventsOnUserTimezoneChangedHandler {
   public async handle(event: UserTimezoneChangedEvent): Promise<void> {
     try {
       // Delegate to use case (thin adapter pattern)
-      await this.rescheduleEventsOnTimezoneChangeUseCase.execute({
+      const result = await this.rescheduleEventsOnTimezoneChangeUseCase.execute({
         userId: event.userId,
         newTimezone: event.newTimezone,
       });
+
+      // Log reschedule results (including any skipped events)
+      logger.info({
+        msg: 'Events rescheduled for timezone change',
+        userId: event.userId,
+        rescheduledCount: result.rescheduledCount,
+        skippedCount: result.skippedCount,
+        skippedEventIds: result.skippedEventIds,
+      });
+
+      // Warn if events were skipped
+      if (result.skippedCount > 0) {
+        logger.warn({
+          msg: 'Some events could not be rescheduled due to PROCESSING state',
+          userId: event.userId,
+          skippedCount: result.skippedCount,
+          skippedEventIds: result.skippedEventIds,
+        });
+      }
     } catch (error) {
       // Log error with event context for debugging
       logger.error({

@@ -32,6 +32,7 @@ describe('ClaimReadyEventsUseCase', () => {
       findByUserId: jest.fn(),
       update: jest.fn(),
       deleteByUserId: jest.fn(),
+      findMissedEvents: jest.fn(),
     };
 
     // Create use case with mocked repository

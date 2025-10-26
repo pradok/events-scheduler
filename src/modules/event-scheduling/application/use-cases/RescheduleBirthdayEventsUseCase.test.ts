@@ -26,6 +26,7 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       update: jest.fn(),
       claimReadyEvents: jest.fn(),
       deleteByUserId: jest.fn(),
+      findMissedEvents: jest.fn(),
     } as jest.Mocked<IEventRepository>;
 
     // Real timezone service and registry
@@ -78,10 +79,10 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       mockEventRepository.findByUserId.mockResolvedValue([pendingEvent]);
 
       // Act
-      const rescheduledCount = await useCase.execute(dto);
+      const result = await useCase.execute(dto);
 
       // Assert - Rescheduled 1 event
-      expect(rescheduledCount).toBe(1);
+      expect(result.rescheduledCount).toBe(1);
       expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
     });
 
@@ -99,10 +100,10 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       mockEventRepository.findByUserId.mockResolvedValue([event1, event2, event3]);
 
       // Act
-      const count = await useCase.execute(dto);
+      const result = await useCase.execute(dto);
 
       // Assert
-      expect(count).toBe(3);
+      expect(result.rescheduledCount).toBe(3);
       expect(mockEventRepository.update).toHaveBeenCalledTimes(3);
     });
 
@@ -117,10 +118,10 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       mockEventRepository.findByUserId.mockResolvedValue([]);
 
       // Act
-      const count = await useCase.execute(dto);
+      const result = await useCase.execute(dto);
 
       // Assert
-      expect(count).toBe(0);
+      expect(result.rescheduledCount).toBe(0);
       expect(mockEventRepository.update).not.toHaveBeenCalled();
     });
 
@@ -145,10 +146,10 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       ]);
 
       // Act
-      const count = await useCase.execute(dto);
+      const result = await useCase.execute(dto);
 
       // Assert - Only PENDING rescheduled
-      expect(count).toBe(1);
+      expect(result.rescheduledCount).toBe(1);
       expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
     });
 
@@ -171,10 +172,10 @@ describe('RescheduleBirthdayEventsUseCase', () => {
       ]);
 
       // Act
-      const count = await useCase.execute(dto);
+      const result = await useCase.execute(dto);
 
       // Assert - Only BIRTHDAY rescheduled
-      expect(count).toBe(1);
+      expect(result.rescheduledCount).toBe(1);
       expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
     });
 

@@ -38,11 +38,30 @@ export class RescheduleEventsOnUserBirthdayChangedHandler {
   public async handle(event: UserBirthdayChangedEvent): Promise<void> {
     try {
       // Adapt event payload to use case DTO
-      await this.rescheduleBirthdayEventsUseCase.execute({
+      const result = await this.rescheduleBirthdayEventsUseCase.execute({
         userId: event.userId,
         newDateOfBirth: event.newDateOfBirth,
         timezone: event.timezone,
       });
+
+      // Log reschedule results (including any skipped events)
+      logger.info({
+        msg: 'Birthday events rescheduled',
+        userId: event.userId,
+        rescheduledCount: result.rescheduledCount,
+        skippedCount: result.skippedCount,
+        skippedEventIds: result.skippedEventIds,
+      });
+
+      // Warn if events were skipped
+      if (result.skippedCount > 0) {
+        logger.warn({
+          msg: 'Some events could not be rescheduled due to PROCESSING state',
+          userId: event.userId,
+          skippedCount: result.skippedCount,
+          skippedEventIds: result.skippedEventIds,
+        });
+      }
     } catch (error) {
       // Log event context for debugging
       logger.error({

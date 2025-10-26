@@ -28,6 +28,7 @@ describe('RescheduleEventsOnUserBirthdayChangedHandler', () => {
       update: jest.fn(),
       claimReadyEvents: jest.fn(),
       deleteByUserId: jest.fn(),
+      findMissedEvents: jest.fn(),
     } as jest.Mocked<IEventRepository>;
 
     // Real timezone service and registry

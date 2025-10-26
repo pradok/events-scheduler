@@ -6,6 +6,9 @@ import {
   RescheduleEventsOnTimezoneChangeDTO,
   RescheduleEventsOnTimezoneChangeSchema,
 } from '../dtos/RescheduleEventsOnTimezoneChangeDTO';
+import { RescheduleEventsResult } from '../types/RescheduleEventsResult';
+import { OptimisticLockError } from '../../../../domain/errors/OptimisticLockError';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Use case for rescheduling events when user timezone changes
@@ -15,6 +18,11 @@ import {
  *
  * **Key Behavior:** When timezone changes, targetTimestampLocal stays the same (9:00 AM),
  * but targetTimestampUTC is recalculated using the new timezone.
+ *
+ * **Race Condition Protection:**
+ * Events in PROCESSING state are skipped with a warning log. This prevents race conditions
+ * when the recovery service or scheduler is executing an event at the same time the user
+ * updates their timezone. Optimistic locking provides a second layer of protection.
  *
  * **Bounded Context:** Event Scheduling Context
  * **Layer:** Application (orchestrates domain logic)
@@ -55,11 +63,11 @@ export class RescheduleEventsOnTimezoneChangeUseCase {
    *    d. Persist via eventRepository.update()
    *
    * @param dto - Data transfer object with userId and newTimezone
-   * @returns Count of rescheduled events
+   * @returns RescheduleEventsResult with counts of rescheduled and skipped events
    * @throws ZodError if input validation fails
    * @throws Error if repository operations fail
    */
-  public async execute(dto: RescheduleEventsOnTimezoneChangeDTO): Promise<number> {
+  public async execute(dto: RescheduleEventsOnTimezoneChangeDTO): Promise<RescheduleEventsResult> {
     // Step 1: Validate input
     RescheduleEventsOnTimezoneChangeSchema.parse(dto);
 
@@ -70,7 +78,12 @@ export class RescheduleEventsOnTimezoneChangeUseCase {
     const pendingEvents = allEvents.filter((e) => e.status === EventStatus.PENDING);
 
     if (pendingEvents.length === 0) {
-      return 0; // No events to reschedule
+      return {
+        rescheduledCount: 0,
+        skippedCount: 0,
+        totalPendingCount: 0,
+        skippedEventIds: [],
+      };
     }
 
     // Step 4: Validate new timezone
@@ -78,29 +91,68 @@ export class RescheduleEventsOnTimezoneChangeUseCase {
 
     // Step 5: Reschedule each PENDING event
     let rescheduledCount = 0;
+    let skippedCount = 0;
+    const skippedEventIds: string[] = [];
 
     for (const existingEvent of pendingEvents) {
-      // Keep local time unchanged (e.g., 9:00 AM)
-      const targetTimestampLocal = existingEvent.targetTimestampLocal;
+      // Skip events that are already being processed (race condition protection)
+      if (existingEvent.status === EventStatus.PROCESSING) {
+        logger.warn({
+          msg: 'Skipping reschedule for event in PROCESSING state',
+          eventId: existingEvent.id,
+          userId: dto.userId,
+          currentStatus: existingEvent.status,
+          reason: 'Event is currently being executed and cannot be safely rescheduled',
+        });
+        skippedCount++;
+        skippedEventIds.push(existingEvent.id);
+        continue;
+      }
 
-      // Recalculate UTC time using new timezone
-      const newTargetTimestampUTC = this.timezoneService.convertToUTC(
-        targetTimestampLocal,
-        newTimezone
-      );
+      try {
+        // Keep local time unchanged (e.g., 9:00 AM)
+        const targetTimestampLocal = existingEvent.targetTimestampLocal;
 
-      // Reschedule event (immutable update with version increment)
-      const rescheduledEvent = existingEvent.reschedule(
-        newTargetTimestampUTC,
-        targetTimestampLocal,
-        dto.newTimezone
-      );
+        // Recalculate UTC time using new timezone
+        const newTargetTimestampUTC = this.timezoneService.convertToUTC(
+          targetTimestampLocal,
+          newTimezone
+        );
 
-      // Persist updated event
-      await this.eventRepository.update(rescheduledEvent);
-      rescheduledCount++;
+        // Reschedule event (immutable update with version increment)
+        const rescheduledEvent = existingEvent.reschedule(
+          newTargetTimestampUTC,
+          targetTimestampLocal,
+          dto.newTimezone
+        );
+
+        // Persist updated event (optimistic locking will catch concurrent modifications)
+        await this.eventRepository.update(rescheduledEvent);
+        rescheduledCount++;
+      } catch (error) {
+        // Handle optimistic lock errors (event was modified by another process)
+        if (error instanceof OptimisticLockError) {
+          logger.warn({
+            msg: 'Event was modified during reschedule (optimistic lock conflict), skipping',
+            eventId: existingEvent.id,
+            userId: dto.userId,
+            error: error.message,
+          });
+          skippedCount++;
+          skippedEventIds.push(existingEvent.id);
+          // Continue to next event - don't fail the entire operation
+          continue;
+        }
+        // Rethrow unexpected errors
+        throw error;
+      }
     }
 
-    return rescheduledCount;
+    return {
+      rescheduledCount,
+      skippedCount,
+      totalPendingCount: pendingEvents.length,
+      skippedEventIds,
+    };
   }
 }

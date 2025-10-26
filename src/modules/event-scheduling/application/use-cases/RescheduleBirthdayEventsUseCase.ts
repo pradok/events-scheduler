@@ -8,6 +8,9 @@ import {
   RescheduleBirthdayEventsDTO,
   RescheduleBirthdayEventsSchema,
 } from '../dtos/RescheduleBirthdayEventsDTO';
+import { RescheduleEventsResult } from '../types/RescheduleEventsResult';
+import { OptimisticLockError } from '../../../../domain/errors/OptimisticLockError';
+import { logger } from '../../../../shared/logger';
 
 /**
  * Use Case: Reschedule birthday events when user's birthday changes
@@ -24,6 +27,11 @@ import {
  *
  * **Business Rule:** Only PENDING birthday events are rescheduled. Events with status
  * PROCESSING, COMPLETED, or FAILED are never modified (they are historical records).
+ *
+ * **Race Condition Protection:**
+ * Events in PROCESSING state are skipped with a warning log. This prevents race conditions
+ * when the recovery service or scheduler is executing an event at the same time the user
+ * updates their birthday. Optimistic locking provides a second layer of protection.
  *
  * **Design Pattern:** Use Case Pattern (from Clean Architecture)
  * - Reusable business logic
@@ -68,11 +76,11 @@ export class RescheduleBirthdayEventsUseCase {
    *    d. Persist via eventRepository.update()
    *
    * @param dto - Data needed to reschedule birthday events
-   * @returns Number of events rescheduled
+   * @returns RescheduleEventsResult with counts of rescheduled and skipped events
    * @throws ZodError if validation fails
    * @throws UnsupportedEventTypeError if BIRTHDAY handler not registered
    */
-  public async execute(dto: RescheduleBirthdayEventsDTO): Promise<number> {
+  public async execute(dto: RescheduleBirthdayEventsDTO): Promise<RescheduleEventsResult> {
     // Step 1: Validate input
     const validatedDto = RescheduleBirthdayEventsSchema.parse(dto);
 
@@ -85,7 +93,12 @@ export class RescheduleBirthdayEventsUseCase {
     );
 
     if (pendingBirthdayEvents.length === 0) {
-      return 0; // No events to reschedule
+      return {
+        rescheduledCount: 0,
+        skippedCount: 0,
+        totalPendingCount: 0,
+        skippedEventIds: [],
+      };
     }
 
     // Step 4: Create UserInfo from DTO
@@ -102,25 +115,66 @@ export class RescheduleBirthdayEventsUseCase {
 
     // Step 6: Reschedule each PENDING birthday event
     const timezone = new Timezone(validatedDto.timezone);
+    let rescheduledCount = 0;
+    let skippedCount = 0;
+    const skippedEventIds: string[] = [];
 
     for (const existingEvent of pendingBirthdayEvents) {
-      // Calculate new next birthday at 9:00 AM local time
-      const nextBirthdayLocal = handler.calculateNextOccurrence(userInfo);
+      // Skip events that are already being processed (race condition protection)
+      if (existingEvent.status === EventStatus.PROCESSING) {
+        logger.warn({
+          msg: 'Skipping reschedule for event in PROCESSING state',
+          eventId: existingEvent.id,
+          userId: validatedDto.userId,
+          currentStatus: existingEvent.status,
+          reason: 'Event is currently being executed and cannot be safely rescheduled',
+        });
+        skippedCount++;
+        skippedEventIds.push(existingEvent.id);
+        continue;
+      }
 
-      // Convert to UTC
-      const nextBirthdayUTC = this.timezoneService.convertToUTC(nextBirthdayLocal, timezone);
+      try {
+        // Calculate new next birthday at 9:00 AM local time
+        const nextBirthdayLocal = handler.calculateNextOccurrence(userInfo);
 
-      // Reschedule event (immutable update with version increment)
-      const rescheduledEvent = existingEvent.reschedule(
-        nextBirthdayUTC,
-        nextBirthdayLocal,
-        validatedDto.timezone
-      );
+        // Convert to UTC
+        const nextBirthdayUTC = this.timezoneService.convertToUTC(nextBirthdayLocal, timezone);
 
-      // Persist updated event
-      await this.eventRepository.update(rescheduledEvent);
+        // Reschedule event (immutable update with version increment)
+        const rescheduledEvent = existingEvent.reschedule(
+          nextBirthdayUTC,
+          nextBirthdayLocal,
+          validatedDto.timezone
+        );
+
+        // Persist updated event (optimistic locking will catch concurrent modifications)
+        await this.eventRepository.update(rescheduledEvent);
+        rescheduledCount++;
+      } catch (error) {
+        // Handle optimistic lock errors (event was modified by another process)
+        if (error instanceof OptimisticLockError) {
+          logger.warn({
+            msg: 'Event was modified during reschedule (optimistic lock conflict), skipping',
+            eventId: existingEvent.id,
+            userId: validatedDto.userId,
+            error: error.message,
+          });
+          skippedCount++;
+          skippedEventIds.push(existingEvent.id);
+          // Continue to next event - don't fail the entire operation
+          continue;
+        }
+        // Rethrow unexpected errors
+        throw error;
+      }
     }
 
-    return pendingBirthdayEvents.length;
+    return {
+      rescheduledCount,
+      skippedCount,
+      totalPendingCount: pendingBirthdayEvents.length,
+      skippedEventIds,
+    };
   }
 }

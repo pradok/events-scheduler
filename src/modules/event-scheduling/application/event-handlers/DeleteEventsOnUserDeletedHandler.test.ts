@@ -17,6 +17,7 @@ describe('DeleteEventsOnUserDeletedHandler', () => {
       update: jest.fn(),
       claimReadyEvents: jest.fn(),
       deleteByUserId: jest.fn(),
+      findMissedEvents: jest.fn(),
     } as jest.Mocked<IEventRepository>;
 
     // Create handler

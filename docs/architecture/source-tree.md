@@ -61,6 +61,8 @@ bday/
 │   │       │   └── services/
 │   │       │       ├── TimezoneService.ts      # ✅ DONE (Story 1.5)
 │   │       │       ├── TimezoneService.test.ts # ✅ 15 tests
+│   │       │       ├── RecoveryService.ts      # ✅ DONE (Story 3.1) - System-triggered service
+│   │       │       ├── RecoveryService.test.ts # ✅ 6 tests
 │   │       │       └── event-handlers/         # ✅ DONE (Story 1.5)
 │   │       │           ├── IEventHandler.ts    # ✅ Event handler interface
 │   │       │           ├── EventHandlerRegistry.ts     # ✅ Strategy registry

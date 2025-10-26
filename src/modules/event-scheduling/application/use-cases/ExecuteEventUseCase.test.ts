@@ -46,6 +46,7 @@ describe('ExecuteEventUseCase', () => {
       findByUserId: jest.fn(),
       claimReadyEvents: jest.fn(),
       deleteByUserId: jest.fn(),
+      findMissedEvents: jest.fn(),
     };
 
     // Create mock webhook client

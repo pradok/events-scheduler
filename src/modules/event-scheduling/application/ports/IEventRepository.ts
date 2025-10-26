@@ -99,4 +99,47 @@ export interface IEventRepository {
    * @returns Promise that resolves when all events are deleted
    */
   deleteByUserId(userId: string): Promise<void>;
+
+  /**
+   * Finds missed events that should have executed during system downtime.
+   *
+   * **Purpose:**
+   * Detects PENDING events with targetTimestampUTC in the past, indicating
+   * they were scheduled to execute but missed due to system downtime, deployment,
+   * or other service interruptions.
+   *
+   * **Query Specification:**
+   * Returns events where:
+   * - `status = 'PENDING'` (not yet executed)
+   * - `targetTimestampUTC < NOW()` (should have already fired)
+   * - Ordered by `targetTimestampUTC ASC` (oldest events first for fair recovery)
+   * - Limited to `limit` parameter (prevents memory overflow during recovery)
+   *
+   * **Why ORDER BY targetTimestampUTC ASC?**
+   * - Ensures fairness: Users with birthdays 7 days ago get priority over 1 hour ago
+   * - Matches scheduler's query pattern (oldest first)
+   * - Allows incremental recovery (process oldest batch, then next oldest batch)
+   *
+   * **Why limit parameter?**
+   * - Prevents overwhelming system during recovery from extended downtime
+   * - Enables batch processing (Story 3.2 will process via SQS in batches)
+   * - Typical usage: `findMissedEvents(1000)` for 1000 events per batch
+   *
+   * **Difference from claimReadyEvents():**
+   * - `findMissedEvents()`: Read-only query, does NOT modify event status
+   * - `claimReadyEvents()`: Atomically locks events and updates status to PROCESSING
+   *
+   * **Usage in RecoveryService:**
+   * This method is called on system startup to detect backlogged events.
+   * The RecoveryService logs statistics about missed events, then Story 3.2
+   * will handle sending them to SQS for execution.
+   *
+   * @param limit - Maximum number of missed events to return (typically 1000)
+   * @returns Promise<Event[]> - Array of missed Event entities ordered by targetTimestampUTC ASC (may be empty)
+   *
+   * @see RecoveryService for detection workflow
+   * @see Story 3.1: Recovery Service - Missed Event Detection
+   * @see Story 3.2: Recovery Service - Batch Execution (future)
+   */
+  findMissedEvents(limit: number): Promise<Event[]>;
 }

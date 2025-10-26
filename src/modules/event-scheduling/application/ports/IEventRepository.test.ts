@@ -12,6 +12,7 @@ describe('IEventRepository', () => {
       update: (event: Event) => Promise.resolve(event),
       claimReadyEvents: (_limit: number) => Promise.resolve([mockEvent]),
       deleteByUserId: (_userId: string) => Promise.resolve(),
+      findMissedEvents: (_limit: number) => Promise.resolve([mockEvent]),
     };
 
     expect(repo).toBeDefined();
@@ -27,6 +28,7 @@ describe('IEventRepository', () => {
       update: (event: Event): Promise<Event> => Promise.resolve(event),
       claimReadyEvents: (_limit: number): Promise<Event[]> => Promise.resolve([]),
       deleteByUserId: (_userId: string): Promise<void> => Promise.resolve(),
+      findMissedEvents: (_limit: number): Promise<Event[]> => Promise.resolve([]),
     };
 
     expect(repo).toBeDefined();

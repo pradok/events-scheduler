@@ -663,4 +663,320 @@ describe('PrismaEventRepository - Integration Tests', () => {
       // Prisma will throw a unique constraint violation error
     });
   });
+
+  describe('findMissedEvents()', () => {
+    it('should find events with targetTimestampUTC in the past and PENDING status', async () => {
+      // Arrange
+      const pastTime1 = DateTime.now().minus({ days: 7 });
+      const pastTime2 = DateTime.now().minus({ days: 3 });
+      const futureTime = DateTime.now().plus({ days: 1 });
+
+      // Create PENDING events in the past (should be found)
+      const missedEvent1 = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: pastTime1,
+        targetTimestampLocal: pastTime1,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime1),
+        deliveryPayload: { message: 'Missed event 1' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const missedEvent2 = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: pastTime2,
+        targetTimestampLocal: pastTime2,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime2),
+        deliveryPayload: { message: 'Missed event 2' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Create PENDING event in the future (should NOT be found)
+      const futureEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: futureTime,
+        targetTimestampLocal: futureTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, futureTime),
+        deliveryPayload: { message: 'Future event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      await repository.create(missedEvent1);
+      await repository.create(missedEvent2);
+      await repository.create(futureEvent);
+
+      // Act
+      const missedEvents = await repository.findMissedEvents(10);
+
+      // Assert
+      expect(missedEvents).toHaveLength(2);
+      expect(missedEvents.map((e) => e.id)).toContain(missedEvent1.id);
+      expect(missedEvents.map((e) => e.id)).toContain(missedEvent2.id);
+      expect(missedEvents.map((e) => e.id)).not.toContain(futureEvent.id);
+    });
+
+    it('should exclude PROCESSING, COMPLETED, and FAILED events from results', async () => {
+      // Arrange
+      const pastTime = DateTime.now().minus({ days: 1 });
+
+      // Create PENDING event (should be found)
+      const pendingEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: pastTime,
+        targetTimestampLocal: pastTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime),
+        deliveryPayload: { message: 'Pending event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Create PROCESSING event (should NOT be found)
+      const processingEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PROCESSING,
+        targetTimestampUTC: pastTime,
+        targetTimestampLocal: pastTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime.plus({ seconds: 1 })),
+        deliveryPayload: { message: 'Processing event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Create COMPLETED event (should NOT be found)
+      const completedEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.COMPLETED,
+        targetTimestampUTC: pastTime,
+        targetTimestampLocal: pastTime,
+        targetTimezone: 'America/New_York',
+        executedAt: DateTime.now(),
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime.plus({ seconds: 2 })),
+        deliveryPayload: { message: 'Completed event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Create FAILED event (should NOT be found)
+      const failedEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.FAILED,
+        targetTimestampUTC: pastTime,
+        targetTimestampLocal: pastTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: 'Test failure',
+        retryCount: 3,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, pastTime.plus({ seconds: 3 })),
+        deliveryPayload: { message: 'Failed event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      await repository.create(pendingEvent);
+      await repository.create(processingEvent);
+      await repository.create(completedEvent);
+      await repository.create(failedEvent);
+
+      // Act
+      const missedEvents = await repository.findMissedEvents(10);
+
+      // Assert
+      expect(missedEvents).toHaveLength(1);
+      expect(missedEvents[0]!.id).toBe(pendingEvent.id);
+      expect(missedEvents[0]!.status).toBe(EventStatus.PENDING);
+    });
+
+    it('should return events ordered by targetTimestampUTC ASC', async () => {
+      // Arrange - Create events with different timestamps (insert in random order)
+      const oldestTime = DateTime.now().minus({ days: 7 });
+      const middleTime = DateTime.now().minus({ days: 3 });
+      const newestTime = DateTime.now().minus({ hours: 1 });
+
+      const oldestEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: oldestTime,
+        targetTimestampLocal: oldestTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, oldestTime),
+        deliveryPayload: { message: 'Oldest event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const middleEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: middleTime,
+        targetTimestampLocal: middleTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, middleTime),
+        deliveryPayload: { message: 'Middle event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      const newestEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: newestTime,
+        targetTimestampLocal: newestTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, newestTime),
+        deliveryPayload: { message: 'Newest event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      // Insert in random order (not chronological)
+      await repository.create(middleEvent);
+      await repository.create(newestEvent);
+      await repository.create(oldestEvent);
+
+      // Act
+      const missedEvents = await repository.findMissedEvents(10);
+
+      // Assert
+      expect(missedEvents).toHaveLength(3);
+      // Verify ASC order: oldest first, newest last
+      expect(missedEvents[0]!.id).toBe(oldestEvent.id);
+      expect(missedEvents[1]!.id).toBe(middleEvent.id);
+      expect(missedEvents[2]!.id).toBe(newestEvent.id);
+    });
+
+    it('should respect batch limit parameter', async () => {
+      // Arrange - Create 5 missed events
+      const pastTime = DateTime.now().minus({ days: 1 });
+      const events = [];
+
+      for (let i = 0; i < 5; i++) {
+        const event = new Event({
+          id: randomUUID(),
+          userId: testUserId,
+          eventType: 'BIRTHDAY',
+          status: EventStatus.PENDING,
+          targetTimestampUTC: pastTime.plus({ seconds: i }),
+          targetTimestampLocal: pastTime.plus({ seconds: i }),
+          targetTimezone: 'America/New_York',
+          executedAt: null,
+          failureReason: null,
+          retryCount: 0,
+          version: 1,
+          idempotencyKey: IdempotencyKey.generate(testUserId, pastTime.plus({ seconds: i })),
+          deliveryPayload: { message: `Event ${i}` },
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        });
+        events.push(event);
+        await repository.create(event);
+      }
+
+      // Act - Request only 3 events
+      const missedEvents = await repository.findMissedEvents(3);
+
+      // Assert
+      expect(missedEvents).toHaveLength(3);
+      // Verify we get the oldest 3 events (due to ASC ordering)
+      expect(missedEvents[0]!.id).toBe(events[0]!.id);
+      expect(missedEvents[1]!.id).toBe(events[1]!.id);
+      expect(missedEvents[2]!.id).toBe(events[2]!.id);
+    });
+
+    it('should return empty array when no missed events exist', async () => {
+      // Arrange - Only create future or non-PENDING events
+      const futureTime = DateTime.now().plus({ days: 1 });
+      const futureEvent = new Event({
+        id: randomUUID(),
+        userId: testUserId,
+        eventType: 'BIRTHDAY',
+        status: EventStatus.PENDING,
+        targetTimestampUTC: futureTime,
+        targetTimestampLocal: futureTime,
+        targetTimezone: 'America/New_York',
+        executedAt: null,
+        failureReason: null,
+        retryCount: 0,
+        version: 1,
+        idempotencyKey: IdempotencyKey.generate(testUserId, futureTime),
+        deliveryPayload: { message: 'Future event' },
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      });
+
+      await repository.create(futureEvent);
+
+      // Act
+      const missedEvents = await repository.findMissedEvents(10);
+
+      // Assert
+      expect(missedEvents).toHaveLength(0);
+    });
+  });
 });
