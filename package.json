@@ -28,6 +28,7 @@
     "docker:stop": "./scripts/docker-stop.sh",
     "docker:reset": "./scripts/docker-reset.sh",
     "docker:logs": "./scripts/docker-logs.sh",
+    "docker:verify": "./scripts/verify-localstack.sh",
     "docker:teardown": "cd docker && docker-compose down -v",
     "docker:teardown:all": "cd docker && docker-compose down -v --rmi all",
     "prisma:generate": "prisma generate",

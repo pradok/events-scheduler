@@ -1,66 +1,85 @@
 # Local Development Guide
 
-This guide covers how to run the Time-Based Event Scheduling System locally using Docker, LocalStack, and the event scheduler Lambda function.
+**Complete guide for running and developing the Time-Based Event Scheduling System locally**
+
+For a quick 5-minute setup, see [Getting Started](./getting-started.md).
 
 ---
 
-## Prerequisites
+## Overview
 
-- Node.js 20.11.0
-- Docker Desktop
-- npm 10+
-
----
-
-## Quick Start
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Generate Prisma Client
-npm run prisma:generate
-
-# 3. Start Docker services (PostgreSQL + LocalStack)
-npm run docker:start
-
-# 4. Run database migrations
-npm run prisma:migrate
-
-# 5. Build and deploy scheduler Lambda
-npm run lambda:all
-```
+This guide covers:
+- Docker environment (PostgreSQL + LocalStack)
+- Database management (Prisma migrations, seeding)
+- Lambda functions (build, deploy, test)
+- NPM scripts reference
+- Development workflows
 
 ---
 
 ## Docker Services
 
-### Start All Services
+### Services Overview
+
+The local environment runs two Docker containers:
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| **PostgreSQL** | `postgres:16.1` | 5432 | Database for users and events |
+| **LocalStack** | `localstack/localstack:3.1.0` | 4566 | AWS service emulation (SQS, Lambda, EventBridge) |
+
+### Start Services
 
 ```bash
 npm run docker:start
 ```
 
-This starts:
-- PostgreSQL 16 (port 5432)
-- LocalStack (port 4566)
-  - SQS Queue: `events-queue`
-  - EventBridge Rule: `event-scheduler-rule`
-  - Lambda Function: `event-scheduler`
+**What it does:**
 
-### Stop All Services
+- Starts PostgreSQL and LocalStack containers
+- Runs LocalStack init script to create AWS resources
+- Waits for health checks to pass
+
+**Verify services running:**
+
+```bash
+docker ps
+```
+
+Expected output:
+
+```
+CONTAINER ID   IMAGE                        STATUS         PORTS
+abc123         postgres:16.1                Up 10 seconds  0.0.0.0:5432->5432/tcp
+def456         localstack/localstack:3.1.0  Up 10 seconds  0.0.0.0:4566->4566/tcp
+```
+
+### Stop Services
 
 ```bash
 npm run docker:stop
 ```
 
-### Reset All Services
+**What it does:**
+
+- Stops containers
+- **Keeps data volumes** (PostgreSQL data, LocalStack state)
+- Next `docker:start` will be faster
+
+### Reset Services (Clean Slate)
 
 ```bash
 npm run docker:reset
 ```
 
-Deletes all Docker containers and volumes (clean slate).
+**What it does:**
+
+- Stops all containers
+- **Deletes all volumes** (database data, LocalStack state)
+- Restarts containers from scratch
+- Runs init scripts again
+
+**Use when:** Starting fresh before tests, recovering from broken state
 
 ### View Logs
 
@@ -68,9 +87,149 @@ Deletes all Docker containers and volumes (clean slate).
 npm run docker:logs
 ```
 
+**What it shows:**
+
+- LocalStack initialization logs
+- Resource creation messages
+- Any errors
+
+Press `Ctrl+C` to stop following logs.
+
+### Verify LocalStack Resources
+
+```bash
+npm run docker:verify
+```
+
+**What it checks:**
+
+- LocalStack health endpoint
+- SQS queues exist (bday-events-queue, bday-events-dlq)
+- DLQ redrive policy configured
+- IAM role exists
+- EventBridge rule exists and enabled
+- CloudWatch Logs service ready
+
+**Expected output:**
+
+```
+✅ All checks passed!
+
+LocalStack is ready for E2E testing.
+```
+
 ---
 
-## Scheduler Lambda Function
+## Database Management
+
+### PostgreSQL Configuration
+
+**Connection Details:**
+
+```bash
+Host:     localhost
+Port:     5432
+Database: bday_db
+User:     bday_user
+Password: local_dev_password  (from docker-compose.yml)
+```
+
+**Connection String:**
+
+```
+postgresql://bday_user:local_dev_password@localhost:5432/bday_db
+```
+
+### Prisma Commands
+
+#### Generate Prisma Client
+
+```bash
+npm run prisma:generate
+```
+
+**When to run:**
+
+- After pulling new code that changed `schema.prisma`
+- After modifying `schema.prisma` yourself
+
+**What it does:** Generates TypeScript types and Prisma Client from schema
+
+#### Run Migrations
+
+```bash
+npm run prisma:migrate
+```
+
+**When to run:**
+
+- First time setup
+- After pulling new migrations
+- After creating new migrations
+
+**What it does:**
+
+- Applies pending migrations to database
+- Creates `users` and `events` tables with proper schema
+
+#### Create New Migration
+
+```bash
+npm run prisma:migrate -- --name add_user_email
+```
+
+**What it does:**
+
+- Compares current schema to database
+- Generates migration SQL file
+- Applies migration
+
+#### Open Prisma Studio (Database GUI)
+
+```bash
+npm run prisma:studio
+```
+
+Opens at: http://localhost:5555
+
+**Use for:**
+
+- Viewing database records
+- Manually creating test data
+- Debugging data issues
+
+#### Seed Database (Optional)
+
+```bash
+npm run db:seed
+```
+
+**What it does:** Populates database with test data (if `prisma/seed.ts` exists)
+
+#### Reset Database
+
+```bash
+npm run db:reset
+```
+
+**What it does:**
+
+- Drops all tables
+- Runs all migrations from scratch
+- Runs seed script (if configured)
+
+**WARNING:** Deletes all data!
+
+---
+
+## Lambda Functions
+
+### Overview
+
+The system uses two Lambda functions:
+
+1. **event-scheduler** - Polls database for ready events, sends to SQS
+2. **event-worker** - Consumes SQS messages, delivers webhooks
 
 ### Build Lambda Package
 
@@ -78,289 +237,388 @@ npm run docker:logs
 npm run lambda:build
 ```
 
-Creates `dist/event-scheduler.zip` with bundled handler code and dependencies.
+**What it does:**
+
+- Bundles Lambda handler code with esbuild
+- Creates deployment package: `dist/event-scheduler.zip`
+
+**Location:** `scripts/lambda-build.sh`
 
 ### Deploy Lambda to LocalStack
 
 ```bash
-npm run lambda:deploy
+npm run lambda:deploy:localstack
 ```
 
-Deploys the Lambda function to LocalStack with:
+**What it does:**
+
+- Deploys Lambda function to LocalStack
 - Function name: `event-scheduler`
 - Runtime: `nodejs20.x`
-- Handler: `schedulerHandler.handler`
 - Timeout: 60 seconds
 - Memory: 512 MB
+- Sets environment variables (DATABASE_URL, SQS_QUEUE_URL)
 
-### Configure EventBridge Trigger
+**Location:** `scripts/deploy-lambda.js`
 
-```bash
-npm run lambda:configure
-```
-
-Adds the Lambda function as a target for the EventBridge rule (triggers every 1 minute).
-
-### Build, Deploy, and Configure (All-in-One)
+### Build + Deploy (All-in-One)
 
 ```bash
 npm run lambda:all
 ```
 
-Runs all three steps above in sequence.
+**Runs:**
 
----
+1. `lambda:build` - Build package
+2. `lambda:deploy:localstack` - Deploy to LocalStack
 
-## Testing the Scheduler
+**Use for:** Quick redeploy after code changes
 
-### 1. Create Test Events in Database
-
-```bash
-# Start Prisma Studio
-npm run prisma:studio
-```
-
-Navigate to [http://localhost:5555](http://localhost:5555) and manually create test events with:
-- `status`: `PENDING`
-- `targetTimestampUTC`: Current time or past time
-- `userId`: Valid user ID from `users` table
-
-### 2. Manually Trigger Scheduler Lambda
+### Manually Invoke Lambda
 
 ```bash
-awslocal lambda invoke \
+docker exec bday-localstack sh -c "awslocal lambda invoke \
   --function-name event-scheduler \
   --log-type Tail \
-  output.json
-
-# View response
-cat output.json
+  output.json && cat output.json"
 ```
 
-### 3. Verify Events Were Claimed
+**Expected output:**
 
-Check that events status changed from `PENDING` to `PROCESSING`:
-
-```bash
-# Option 1: Prisma Studio (GUI)
-npm run prisma:studio
-
-# Option 2: psql (CLI)
-docker exec -it bday-postgres psql -U bday_user -d bday_db
-SELECT id, status, "targetTimestampUTC" FROM events;
+```json
+{
+  "statusCode": 200,
+  "body": {
+    "message": "Scheduler executed successfully",
+    "eventsClaimed": 0
+  }
+}
 ```
 
-### 4. Verify Messages in SQS Queue
+### View Lambda Logs
 
 ```bash
-awslocal sqs receive-message \
-  --queue-url http://localhost:4566/000000000000/events-queue \
-  --max-number-of-messages 10
-```
-
-Expected output: JSON messages with `eventId`, `eventType`, `idempotencyKey`, and `metadata` fields.
-
----
-
-## Viewing Lambda Logs
-
-### LocalStack Logs (Lambda Execution)
-
-```bash
-awslocal logs tail /aws/lambda/event-scheduler --follow
-```
-
-### View All Lambda Functions
-
-```bash
-awslocal lambda list-functions
-```
-
-### View EventBridge Rules
-
-```bash
-awslocal events list-rules
-```
-
-### View EventBridge Targets
-
-```bash
-awslocal events list-targets-by-rule --rule event-scheduler-rule
+docker exec bday-localstack sh -c "awslocal logs tail /aws/lambda/event-scheduler --follow"
 ```
 
 ---
 
 ## Environment Variables
 
-The following environment variables are required for the Lambda function (configured automatically during deployment):
+### Local Development (.env)
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://bday_user:local_dev_password@host.docker.internal:5432/bday_db` |
-| `SQS_QUEUE_URL` | SQS queue URL for event messages | `http://localhost:4566/000000000000/events-queue` |
-| `AWS_ENDPOINT_URL` | LocalStack endpoint (local only) | `http://localhost:4566` |
-| `AWS_REGION` | AWS region | `us-east-1` |
-| `NODE_ENV` | Node environment | `development` |
-| `LOG_LEVEL` | Logging level | `info` |
+```bash
+# Database
+DATABASE_URL="postgresql://bday_user:local_dev_password@localhost:5432/bday_db"
 
-**Note:** For production, remove `AWS_ENDPOINT_URL` to use real AWS services.
+# LocalStack (for local development)
+AWS_ENDPOINT_URL=http://localhost:4566
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+
+# SQS
+SQS_QUEUE_URL=http://localhost:4566/000000000000/bday-events-queue
+SQS_DLQ_URL=http://localhost:4566/000000000000/bday-events-dlq
+
+# Application
+NODE_ENV=development
+LOG_LEVEL=info
+```
+
+### Lambda Environment Variables
+
+When Lambda runs inside LocalStack/Docker, it needs special configuration:
+
+**DATABASE_URL for Lambda:**
+
+```bash
+postgresql://bday_user:local_dev_password@host.docker.internal:5432/bday_db
+```
+
+**Why `host.docker.internal`?**
+
+- Lambda runs inside Docker container
+- `localhost` refers to the container itself, not your Mac
+- `host.docker.internal` is Docker's special DNS name for host machine
 
 ---
 
-## Troubleshooting
-
-### Issue: Lambda function not found
-
-```bash
-awslocal lambda list-functions
-```
-
-If empty, redeploy:
-
-```bash
-npm run lambda:deploy
-```
-
-### Issue: EventBridge not triggering Lambda
-
-Check that Lambda is added as a target:
-
-```bash
-awslocal events list-targets-by-rule --rule event-scheduler-rule
-```
-
-If empty, run:
-
-```bash
-npm run lambda:configure
-```
-
-### Issue: Database connection error in Lambda
-
-Lambda runs inside Docker and must use `host.docker.internal` instead of `localhost`:
-
-```bash
-# Verify DATABASE_URL in Lambda environment
-awslocal lambda get-function-configuration --function-name event-scheduler
-```
-
-Expected: `postgresql://bday_user:local_dev_password@host.docker.internal:5432/bday_db`
-
-### Issue: SQS queue not receiving messages
-
-1. Verify queue exists:
-
-```bash
-awslocal sqs list-queues
-```
-
-2. Check Lambda logs for errors:
-
-```bash
-awslocal logs tail /aws/lambda/event-scheduler --follow
-```
-
-3. Manually invoke Lambda and check output:
-
-```bash
-awslocal lambda invoke --function-name event-scheduler output.json
-cat output.json
-```
-
----
-
-## Development Workflow
+## Development Workflows
 
 ### Typical Development Cycle
 
-1. **Make code changes** to `src/adapters/primary/lambda/schedulerHandler.ts`
-2. **Run tests**: `npm test`
-3. **Rebuild Lambda**: `npm run lambda:build`
-4. **Redeploy Lambda**: `npm run lambda:deploy`
-5. **Test manually**: `awslocal lambda invoke --function-name event-scheduler output.json`
-6. **View logs**: `awslocal logs tail /aws/lambda/event-scheduler`
+1. **Make code changes** to Lambda handler or domain logic
+2. **Run unit tests:** `npm run test:unit`
+3. **Rebuild Lambda:** `npm run lambda:build`
+4. **Redeploy Lambda:** `npm run lambda:deploy:localstack`
+5. **Test manually:** Invoke Lambda or check EventBridge trigger
+6. **View logs:** `docker exec bday-localstack sh -c "awslocal logs tail /aws/lambda/event-scheduler"`
 
-### Testing Automatic Trigger (Every 1 Minute)
+### Testing Scheduler Locally
 
-After configuring EventBridge, the scheduler Lambda will automatically run every minute. Monitor logs:
+#### 1. Create Test Events
 
 ```bash
-awslocal logs tail /aws/lambda/event-scheduler --follow
+# Open Prisma Studio
+npm run prisma:studio
+```
+
+Navigate to http://localhost:5555 and create events with:
+
+- `status`: `PENDING`
+- `targetTimestampUTC`: Current time or past time
+- `userId`: Valid user ID
+
+#### 2. Invoke Scheduler
+
+```bash
+docker exec bday-localstack sh -c "awslocal lambda invoke \
+  --function-name event-scheduler \
+  output.json && cat output.json"
+```
+
+#### 3. Verify Events Claimed
+
+Check event status changed from `PENDING` to `PROCESSING`:
+
+```bash
+# Option 1: Prisma Studio
+npm run prisma:studio
+
+# Option 2: psql
+docker exec -it bday-postgres psql -U bday_user -d bday_db
+SELECT id, status, "targetTimestampUTC" FROM events;
+```
+
+#### 4. Verify SQS Messages
+
+```bash
+docker exec bday-localstack sh -c "awslocal sqs receive-message \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --max-number-of-messages 10"
+```
+
+Expected: JSON messages with `eventId`, `eventType`, `idempotencyKey`
+
+### Automatic Trigger (EventBridge)
+
+After deploying Lambda, EventBridge will automatically trigger it every 1 minute.
+
+**Monitor automatic execution:**
+
+```bash
+docker exec bday-localstack sh -c "awslocal logs tail /aws/lambda/event-scheduler --follow"
 ```
 
 You should see logs every minute:
+
 ```json
 {
   "msg": "Scheduler Lambda execution started",
-  "eventBridgeRuleName": "arn:aws:events:us-east-1:000000000000:rule/event-scheduler-rule",
-  "eventTime": "2025-10-24T10:00:00Z"
+  "eventBridgeRuleName": "arn:aws:events:us-east-1:000000000000:rule/event-scheduler-rule"
 }
+```
+
+---
+
+## NPM Scripts Reference
+
+### Docker Commands
+
+```bash
+npm run docker:start        # Start PostgreSQL + LocalStack
+npm run docker:stop         # Stop containers (keep data)
+npm run docker:reset        # Delete everything and restart fresh
+npm run docker:logs         # View LocalStack logs
+npm run docker:verify       # Verify LocalStack resources
+npm run docker:teardown     # Stop and remove containers + volumes
+```
+
+### Database Commands
+
+```bash
+npm run prisma:generate     # Generate Prisma Client
+npm run prisma:migrate      # Run migrations
+npm run prisma:studio       # Open database GUI
+npm run db:seed             # Seed test data
+npm run db:reset            # Drop all tables and re-migrate
+```
+
+### Lambda Commands
+
+```bash
+npm run lambda:build                # Build Lambda package
+npm run lambda:deploy:localstack    # Deploy to LocalStack
+npm run lambda:all                  # Build + Deploy
+```
+
+### Testing Commands
+
+```bash
+npm run test                # Run all tests
+npm run test:unit           # Unit tests only
+npm run test:integration    # Integration tests (real database)
+npm run test:e2e            # End-to-end tests (LocalStack + database)
+npm run test:coverage       # Generate coverage report
+```
+
+### Code Quality Commands
+
+```bash
+npm run lint                # Check code style
+npm run typecheck           # TypeScript type checking
+npm run format              # Auto-format code
 ```
 
 ---
 
 ## AWS CLI Commands (LocalStack)
 
-All `aws` commands use `awslocal` alias for LocalStack:
+**Note:** These commands run inside the LocalStack container using `docker exec`.
 
-### SQS
+### SQS Commands
 
 ```bash
 # List queues
-awslocal sqs list-queues
+docker exec bday-localstack sh -c "awslocal sqs list-queues"
 
 # Receive messages
-awslocal sqs receive-message --queue-url <queue-url> --max-number-of-messages 10
+docker exec bday-localstack sh -c "awslocal sqs receive-message \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue \
+  --max-number-of-messages 10"
 
-# Purge queue
-awslocal sqs purge-queue --queue-url <queue-url>
+# Purge queue (delete all messages)
+docker exec bday-localstack sh -c "awslocal sqs purge-queue \
+  --queue-url http://localhost:4566/000000000000/bday-events-queue"
 ```
 
-### Lambda
+### Lambda Commands
 
 ```bash
 # List functions
-awslocal lambda list-functions
+docker exec bday-localstack sh -c "awslocal lambda list-functions"
 
 # Invoke function
-awslocal lambda invoke --function-name event-scheduler output.json
+docker exec bday-localstack sh -c "awslocal lambda invoke \
+  --function-name event-scheduler \
+  output.json && cat output.json"
 
-# Get function logs
-awslocal logs tail /aws/lambda/event-scheduler
+# Get function configuration
+docker exec bday-localstack sh -c "awslocal lambda get-function-configuration \
+  --function-name event-scheduler"
 
 # Delete function
-awslocal lambda delete-function --function-name event-scheduler
+docker exec bday-localstack sh -c "awslocal lambda delete-function \
+  --function-name event-scheduler"
 ```
 
-### EventBridge
+### EventBridge Commands
 
 ```bash
 # List rules
-awslocal events list-rules
+docker exec bday-localstack sh -c "awslocal events list-rules"
 
 # List targets for rule
-awslocal events list-targets-by-rule --rule event-scheduler-rule
+docker exec bday-localstack sh -c "awslocal events list-targets-by-rule \
+  --rule event-scheduler-rule"
 
-# Enable rule
-awslocal events enable-rule --name event-scheduler-rule
+# Disable rule (stop automatic triggers)
+docker exec bday-localstack sh -c "awslocal events disable-rule \
+  --name event-scheduler-rule"
 
-# Disable rule
-awslocal events disable-rule --name event-scheduler-rule
+# Enable rule (resume automatic triggers)
+docker exec bday-localstack sh -c "awslocal events enable-rule \
+  --name event-scheduler-rule"
 ```
+
+### CloudWatch Logs Commands
+
+```bash
+# List log groups
+docker exec bday-localstack sh -c "awslocal logs describe-log-groups"
+
+# Tail Lambda logs (follow mode)
+docker exec bday-localstack sh -c "awslocal logs tail /aws/lambda/event-scheduler --follow"
+
+# Get recent logs
+docker exec bday-localstack sh -c "awslocal logs tail /aws/lambda/event-scheduler --since 10m"
+```
+
+---
+
+## Common Issues
+
+### Docker services won't start
+
+```bash
+# Check Docker Desktop is running
+docker ps
+
+# If error, start Docker Desktop and retry
+npm run docker:start
+```
+
+### Port already in use (5432 or 4566)
+
+```bash
+# Find what's using the port
+lsof -i :5432
+lsof -i :4566
+
+# Kill the process or change ports in docker-compose.yml
+```
+
+### Lambda function not found
+
+```bash
+# List functions
+docker exec bday-localstack sh -c "awslocal lambda list-functions"
+
+# If empty, redeploy
+npm run lambda:all
+```
+
+### Database connection error in Lambda
+
+Lambda must use `host.docker.internal` instead of `localhost`.
+
+**Verify DATABASE_URL:**
+
+```bash
+docker exec bday-localstack sh -c "awslocal lambda get-function-configuration \
+  --function-name event-scheduler" | grep DATABASE_URL
+```
+
+Expected: `postgresql://bday_user:local_dev_password@host.docker.internal:5432/bday_db`
+
+### Prisma Client out of sync
+
+```bash
+# Regenerate Prisma Client
+npm run prisma:generate
+
+# If still errors, delete and regenerate
+rm -rf node_modules/.prisma
+npm run prisma:generate
+```
+
+**More troubleshooting:** See [Debugging Guide](./debugging.md)
 
 ---
 
 ## Next Steps
 
-- **Story 2.4**: Implement Webhook Delivery Adapter
-- **Story 2.5**: Implement Event Executor Use Case
-- **Story 2.6**: Implement Worker Lambda (SQS Consumer)
+- **Run Tests:** See [Testing Guide](./testing-guide.md)
+- **Setup LocalStack:** See [LocalStack Setup](./localstack-setup-community.md)
+- **Troubleshooting:** See [Debugging Guide](./debugging.md)
+- **Architecture:** See [Architecture Documentation](./architecture.md)
 
 ---
 
 ## References
 
 - [Architecture Documentation](./architecture.md)
-- [Story 2.3: EventBridge Scheduler Trigger](./stories/2.3.eventbridge-scheduler-trigger.story.md)
 - [Tech Stack](./architecture/tech-stack.md)
 - [LocalStack Documentation](https://docs.localstack.cloud/)
+- [Prisma Documentation](https://www.prisma.io/docs/)

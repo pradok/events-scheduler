@@ -38,6 +38,21 @@ DLQ_URL=$(awslocal sqs get-queue-url --queue-name bday-events-dlq --query 'Queue
 echo "Queue URL: $QUEUE_URL"
 echo "DLQ URL: $DLQ_URL"
 
+# Configure Dead Letter Queue redrive policy on main queue
+echo "Configuring DLQ redrive policy (maxReceiveCount: 3)..."
+DLQ_ARN=$(awslocal sqs get-queue-attributes \
+  --queue-url "$DLQ_URL" \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)
+
+awslocal sqs set-queue-attributes \
+  --queue-url "$QUEUE_URL" \
+  --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}" \
+  || echo "Redrive policy may already be configured"
+
+echo "DLQ redrive policy configured successfully"
+
 # Create EventBridge rule for event scheduler (triggers every 1 minute)
 # Generic rule for all event types (birthday, anniversary, reminder, etc.)
 echo "Creating EventBridge rule: event-scheduler-rule"

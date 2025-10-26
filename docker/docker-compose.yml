@@ -29,7 +29,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=apigateway,lambda,sqs,events,sns
+      - SERVICES=lambda,sqs,events,logs,iam,apigateway,sns
       - DEBUG=1
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
