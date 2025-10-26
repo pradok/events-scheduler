@@ -18,22 +18,22 @@ echo "Waiting for LocalStack to be ready..."
 sleep 5
 
 # Create SQS Queue for event processing (all event types: birthday, anniversary, reminder, etc.)
-echo "Creating SQS queue: events-queue"
+echo "Creating SQS queue: bday-events-queue"
 awslocal sqs create-queue \
-  --queue-name events-queue \
+  --queue-name bday-events-queue \
   --attributes VisibilityTimeout=30,MessageRetentionPeriod=86400 \
   || echo "Queue may already exist"
 
 # Create Dead Letter Queue for failed events
-echo "Creating SQS Dead Letter Queue: events-dlq"
+echo "Creating SQS Dead Letter Queue: bday-events-dlq"
 awslocal sqs create-queue \
-  --queue-name events-dlq \
+  --queue-name bday-events-dlq \
   --attributes MessageRetentionPeriod=1209600 \
   || echo "DLQ may already exist"
 
 # Get queue URLs
-QUEUE_URL=$(awslocal sqs get-queue-url --queue-name events-queue --query 'QueueUrl' --output text)
-DLQ_URL=$(awslocal sqs get-queue-url --queue-name events-dlq --query 'QueueUrl' --output text)
+QUEUE_URL=$(awslocal sqs get-queue-url --queue-name bday-events-queue --query 'QueueUrl' --output text)
+DLQ_URL=$(awslocal sqs get-queue-url --queue-name bday-events-dlq --query 'QueueUrl' --output text)
 
 echo "Queue URL: $QUEUE_URL"
 echo "DLQ URL: $DLQ_URL"
@@ -64,8 +64,8 @@ echo "LocalStack initialization complete!"
 echo "=========================================="
 echo ""
 echo "Available services:"
-echo "- SQS Queue: events-queue"
-echo "- SQS DLQ: events-dlq"
+echo "- SQS Queue: bday-events-queue"
+echo "- SQS DLQ: bday-events-dlq"
 echo "- EventBridge Rule: event-scheduler-rule"
 echo "- IAM Role: lambda-execution-role"
 echo ""
