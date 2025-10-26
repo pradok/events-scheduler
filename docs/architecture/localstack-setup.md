@@ -7,10 +7,82 @@ LocalStack simulates AWS services for local development and testing, enabling de
 **Version:** LocalStack 3.1.0
 
 **Services Used:**
+
 - **SQS** (Simple Queue Service) - Message queue for event buffering
 - **Lambda** - Compute for scheduler and worker functions
 - **EventBridge** - Scheduled triggers (cron-like scheduling)
 - **IAM** - Roles and permissions (minimal in LocalStack)
+
+## Lambda Architecture
+
+The system uses **two Lambda functions** in a producer-consumer pattern:
+
+### 1. Scheduler Lambda (`event-scheduler`)
+
+**Purpose:** Polls database for ready events and queues them for execution
+
+**Trigger:** EventBridge (every 1 minute)
+
+**Workflow:**
+
+1. Queries database for events where `targetTimestampUTC <= NOW() AND status = 'PENDING'`
+2. Claims events atomically using `FOR UPDATE SKIP LOCKED` (prevents race conditions)
+3. Updates claimed events to `PROCESSING` status
+4. Sends event details to SQS queue (`events-queue`)
+5. Returns summary (events found, events claimed, errors)
+
+**Code:** `src/adapters/primary/lambda/schedulerHandler.ts`
+
+**Deployment Status:** ✅ Deployed to LocalStack via `npm run lambda:all`
+
+### 2. Worker Lambda (`event-worker`)
+
+**Purpose:** Processes events from queue and delivers birthday messages via webhook
+
+**Trigger:** SQS queue (`events-queue`) - batch size 10 messages
+
+**Workflow:**
+
+1. Receives batch of up to 10 messages from SQS
+2. Validates each message payload against schema
+3. For each valid message:
+   - Retrieves event from database (status must be `PROCESSING`)
+   - Delivers birthday message via webhook (POST to configured URL)
+   - Updates event status to `COMPLETED` on success
+   - Generates next year's birthday event (annual recurrence)
+4. Handles errors:
+   - **Permanent failures (4xx):** Mark event `FAILED`, delete message from queue
+   - **Transient failures (5xx, network):** Leave event `PROCESSING`, message reappears after visibility timeout
+   - **Invalid payloads:** Send message to Dead Letter Queue (`events-dlq`)
+
+**Code:** `src/adapters/primary/lambda/workerHandler.ts`
+
+**Deployment Status:** ❌ NOT deployed to LocalStack (tested via integration tests instead)
+
+**Why Not Deployed:**
+
+- Worker Lambda is thoroughly tested in integration tests (Story 2.6)
+- E2E tests can invoke worker handler directly without deployment
+- Deploying both Lambdas adds complexity without additional testing value
+- Integration tests provide 100% code coverage for worker logic
+
+### Event Flow Diagram
+
+```text
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│  EventBridge │──────>│   Scheduler  │──────>│  SQS Queue   │──────>│    Worker    │
+│  (1 minute)  │       │    Lambda    │       │ (events-queue│       │    Lambda    │
+└──────────────┘       └──────────────┘       └──────────────┘       └──────────────┘
+                              │                                              │
+                              ▼                                              ▼
+                       ┌──────────────┐                              ┌──────────────┐
+                       │   Database   │                              │   Webhook    │
+                       │ (PostgreSQL) │                              │   Endpoint   │
+                       └──────────────┘                              └──────────────┘
+
+                       Claims events:                               Delivers messages:
+                       PENDING → PROCESSING                         PROCESSING → COMPLETED
+```
 
 ## Dual-Purpose LocalStack Pattern
 
@@ -368,71 +440,99 @@ npm test
 
 ## AWS CLI Commands (via awslocal)
 
+**IMPORTANT:** The `awslocal` CLI is installed **inside the LocalStack container**, not on your host machine. All commands below must be run using `docker exec`:
+
+```bash
+docker exec bday-localstack awslocal <command>
+```
+
 ### SQS Commands
 
 ```bash
 # List all queues
-awslocal sqs list-queues
+docker exec bday-localstack awslocal sqs list-queues
 
 # Get queue URL
-awslocal sqs get-queue-url --queue-name events-queue
+docker exec bday-localstack awslocal sqs get-queue-url --queue-name events-queue
 
 # Get queue attributes
-awslocal sqs get-queue-attributes --queue-url <QUEUE_URL> --attribute-names All
+docker exec bday-localstack awslocal sqs get-queue-attributes \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/events-queue \
+  --attribute-names All
 
 # Send test message
-awslocal sqs send-message \
-  --queue-url <QUEUE_URL> \
-  --message-body '{"eventId":"123","eventType":"BIRTHDAY"}'
+docker exec bday-localstack awslocal sqs send-message \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/events-queue \
+  --message-body '{"eventId":"123","eventType":"BIRTHDAY","idempotencyKey":"test-key"}'
 
-# Receive messages
-awslocal sqs receive-message --queue-url <QUEUE_URL> --max-number-of-messages 10
+# Receive messages (long polling)
+docker exec bday-localstack awslocal sqs receive-message \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/events-queue \
+  --max-number-of-messages 10 \
+  --wait-time-seconds 5
+
+# Purge queue (delete all messages)
+docker exec bday-localstack awslocal sqs purge-queue \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/events-queue
 ```
 
 ### Lambda Commands
 
 ```bash
 # List Lambda functions
-awslocal lambda list-functions
+docker exec bday-localstack awslocal lambda list-functions
+
+# List with formatted output
+docker exec bday-localstack awslocal lambda list-functions \
+  --query 'Functions[*].[FunctionName,Runtime,Handler]' \
+  --output table
 
 # Get Lambda configuration
-awslocal lambda get-function-configuration --function-name event-scheduler
+docker exec bday-localstack awslocal lambda get-function-configuration \
+  --function-name event-scheduler
 
-# Invoke Lambda manually
-awslocal lambda invoke \
+# Invoke Lambda manually (returns immediately)
+docker exec bday-localstack awslocal lambda invoke \
   --function-name event-scheduler \
   --payload '{}' \
-  response.json
+  /tmp/response.json && docker exec bday-localstack cat /tmp/response.json
 
-# View Lambda logs (LocalStack)
-docker logs localstack | grep event-scheduler
+# View Lambda logs (LocalStack container logs)
+docker logs bday-localstack --tail 100 | grep event-scheduler
 ```
 
 ### EventBridge Commands
 
 ```bash
 # List EventBridge rules
-awslocal events list-rules
+docker exec bday-localstack awslocal events list-rules
+
+# List with formatted output
+docker exec bday-localstack awslocal events list-rules \
+  --query 'Rules[*].[Name,State,ScheduleExpression]' \
+  --output table
 
 # Describe specific rule
-awslocal events describe-rule --name event-scheduler-rule
+docker exec bday-localstack awslocal events describe-rule \
+  --name event-scheduler-rule
 
 # List targets for rule
-awslocal events list-targets-by-rule --rule event-scheduler-rule
+docker exec bday-localstack awslocal events list-targets-by-rule \
+  --rule event-scheduler-rule
 
 # Enable/disable rule
-awslocal events enable-rule --name event-scheduler-rule
-awslocal events disable-rule --name event-scheduler-rule
+docker exec bday-localstack awslocal events enable-rule --name event-scheduler-rule
+docker exec bday-localstack awslocal events disable-rule --name event-scheduler-rule
 ```
 
 ### IAM Commands
 
 ```bash
 # List IAM roles
-awslocal iam list-roles
+docker exec bday-localstack awslocal iam list-roles
 
 # Get role details
-awslocal iam get-role --role-name lambda-execution-role
+docker exec bday-localstack awslocal iam get-role --role-name lambda-execution-role
 ```
 
 ## Environment Variables
