@@ -62,28 +62,45 @@
 
 ---
 
-## Story 4.3: VSCode LocalStack Extension Setup
+## Story 4.3: LocalStack Desktop & VSCode Extension Setup
 
 **As a** developer,
-**I want** the LocalStack VSCode extension configured,
-**so that** I can browse resources and view CloudWatch logs directly in VSCode.
+**I want** LocalStack Desktop and/or VSCode extension configured,
+**so that** I can browse resources, view CloudWatch logs, and manage my LocalStack instance easily.
 
 **Acceptance Criteria:**
+
+**Option A: LocalStack Desktop (Recommended):**
+
+1. LocalStack Desktop downloaded from <https://app.localstack.cloud/download>
+2. Desktop app configured to connect to local Docker instance
+3. Resource Browser shows: Lambda functions, SQS queues, EventBridge rules, CloudWatch Logs
+4. Container management works: start, stop, view logs
+5. CLI interaction available through integrated terminal
+6. Real-time logging and insights visible
+7. Documentation added: "LocalStack Desktop Setup Guide"
+8. Screenshots showing Resource Browser and CloudWatch Logs
+
+**Option B: VSCode LocalStack Extension (Alternative):**
 
 1. LocalStack VSCode extension installed and documented
 2. Extension configured to connect to `http://localhost:4566`
 3. Resource browser shows: Lambda functions, SQS queues, EventBridge rules, CloudWatch Logs
 4. CloudWatch Logs can be viewed and filtered in VSCode
-5. Lambda functions can be invoked from VSCode
-6. Documentation added: "VSCode LocalStack Extension Guide"
-7. Screenshots showing CloudWatch Logs viewer in action
-8. Alternative: CLI commands documented for non-VSCode users (`awslocal logs tail`)
+5. Documentation added: "VSCode LocalStack Extension Guide"
 
-**VSCode Extension Features:**
-- Resource Browser (left sidebar)
-- CloudWatch Logs viewer with search/filter
-- Lambda invocation and testing
-- SQS queue message inspection
+**Option C: CLI Only (No GUI):**
+
+1. CLI commands documented for inspecting resources (`awslocal logs tail`, etc.)
+2. Bash aliases created for common commands
+
+**LocalStack Desktop Features (Included in Base/Free Plan):**
+
+- Container Management (start, stop, create, delete)
+- CLI Interaction (integrated terminal)
+- Real-time Logging & Insights
+- Resource Browser (same as web application)
+- Works with Community Edition (no Pro required!)
 
 ---
 
