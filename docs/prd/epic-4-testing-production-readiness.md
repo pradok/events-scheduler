@@ -223,3 +223,94 @@
    - Environment-specific configuration (local Fastify server vs. Lambda)
    - Reference to AWS Lambda function handler configuration (runtime, timeout, memory)
    - Performance considerations for Lambda cold starts with Fastify
+
+---
+
+## Story 4.11: Recovery Late Execution Flag & Metrics
+
+**As a** developer,
+**I want** missed events executed with a "late execution" flag in logs,
+**so that** recovery operations are distinguishable from normal execution.
+
+**Note:** *Deferred from Epic 3 - useful for observability but not required for basic recovery functionality*
+
+**Acceptance Criteria:**
+
+1. Extend SQSMessagePayload schema with `lateExecution: boolean` field
+2. RecoveryService sends missed events to SQS with metadata flag `lateExecution: true`
+3. ExecuteEventUseCase checks for late execution flag
+4. Late execution logged with additional context: how late, original target time, actual execution time
+5. Late execution metrics tracked separately from on-time execution
+6. Recovery service logs progress: "Recovering 50 missed events..."
+7. Unit tests verify late execution flag propagates correctly
+8. Integration tests verify late execution logging appears in output
+
+**Implementation Notes:**
+
+- Builds on Story 3.2 (basic recovery execution)
+- Adds observability layer without changing core recovery flow
+- Enables CloudWatch queries to distinguish recovery vs normal execution
+- Useful for SLA monitoring and operational dashboards
+
+---
+
+## Story 4.12: Dead Letter Queue for Failed Events
+
+**As a** developer,
+**I want** permanently failed events sent to a Dead Letter Queue,
+**so that** they can be inspected and potentially manually retried.
+
+**Note:** *Deferred from Epic 3 - operational tooling not required for MVP*
+
+**Acceptance Criteria:**
+
+1. SQS Dead Letter Queue (DLQ) configured in LocalStack
+2. Main queue configured with DLQ after 3 failed processing attempts
+3. DLQ receives events that fail all retries
+4. DLQ message includes original event data, error details, retry count
+5. Script created to inspect DLQ messages: `npm run dlq:inspect`
+6. Script created to requeue DLQ messages for retry: `npm run dlq:retry`
+7. Integration tests verify events reach DLQ after exhausting retries
+8. Documentation added for DLQ monitoring and manual intervention
+
+---
+
+## Story 4.13: Enhanced Metrics and Observability
+
+**As a** developer,
+**I want** key metrics logged for monitoring system health,
+**so that** operational issues can be detected and diagnosed.
+
+**Note:** *Deferred from Epic 3 - premature optimization, add after production usage data available*
+
+**Acceptance Criteria:**
+
+1. Metrics logged for: events processed, events succeeded, events failed, processing duration
+2. Metrics distinguish between on-time execution and late execution (recovery)
+3. Metrics include percentiles: p50, p95, p99 for execution duration
+4. Scheduler logs metrics: polling duration, events per poll, claim success rate
+5. Dead Letter Queue size logged periodically
+6. Test coverage metrics logged after test runs
+7. Metrics formatted for easy ingestion by CloudWatch or Prometheus
+8. Documentation added for interpreting metrics and setting up alerts
+
+---
+
+## Story 4.14: Comprehensive Failure Scenario Testing
+
+**As a** developer,
+**I want** E2E tests covering all failure scenarios,
+**so that** recovery and error handling are proven to work correctly.
+
+**Note:** *Deferred from Epic 3 - valuable tests but not MVP blockers*
+
+**Acceptance Criteria:**
+
+1. Test scenario: 24-hour downtime with 50 missed events → recovery executes all without duplicates
+2. Test scenario: System restart during recovery → remaining events processed
+3. Test scenario: Webhook endpoint down → events retry and eventually succeed
+4. Test scenario: Webhook returns 4xx error → event marked FAILED, sent to DLQ
+5. Test scenario: Database connection lost → error logged, system recovers on reconnect
+6. Test scenario: Concurrent schedulers → events claimed once only (no duplicates)
+7. Test scenario: Optimistic lock failure → event skipped, no retry (already claimed)
+8. All failure tests pass with 100% success rate
