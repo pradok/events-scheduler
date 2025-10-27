@@ -26,6 +26,8 @@
     "test:integration:keep-alive": "./scripts/integration-test-setup.sh && jest --testPathPattern='.*\\.integration\\.test\\.ts$' --testTimeout=60000",
     "test:e2e": "./scripts/e2e-test-setup.sh && jest --testPathPattern='.*\\.e2e\\.test\\.ts$' --testTimeout=60000 ; ./scripts/e2e-test-cleanup.sh",
     "test:e2e:keep-alive": "./scripts/e2e-test-setup.sh && jest --testPathPattern='.*\\.e2e\\.test\\.ts$' --testTimeout=60000",
+    "test:manual": "./scripts/test-manual-delivery-override.sh",
+    "test:manual:fast": "./scripts/test-manual-delivery-override.sh 5",
     "test:all": "jest",
     "docker:start": "./scripts/docker-start.sh",
     "docker:stop": "./scripts/docker-stop.sh",

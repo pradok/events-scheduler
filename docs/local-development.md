@@ -576,7 +576,106 @@ SQS_DLQ_URL=http://localhost:4566/000000000000/bday-events-dlq
 # Application
 NODE_ENV=development
 LOG_LEVEL=info
+
+# Manual Testing (Story 4.5)
+# Override delivery times for fast manual E2E testing
+# FAST_TEST_DELIVERY_OFFSET=5    # Events trigger in 5 minutes
 ```
+
+### Fast Manual Testing with FAST_TEST_DELIVERY_OFFSET (Story 4.5)
+
+**Purpose:** Override delivery times for rapid manual testing (without waiting for 9:00 AM).
+
+**Environment Variable Format:**
+
+```bash
+FAST_TEST_DELIVERY_OFFSET={value}
+```
+Events trigger in X time from now. Supports both minutes and seconds.
+
+**Supported Formats:**
+- **Minutes (implicit):** `5` = 5 minutes
+- **Minutes (explicit):** `5m` = 5 minutes
+- **Seconds:** `30s` = 30 seconds (ultra-fast)
+- **Examples:** `1` (1 min), `5` (5 min), `30s` (30 sec), `120` (2 hours)
+
+**How to Use:**
+
+1. **Start server with override:**
+   ```bash
+   FAST_TEST_DELIVERY_OFFSET=5 npm run dev
+   ```
+
+2. **Run manual test script:**
+   ```bash
+   npm run test:manual         # Creates test user, shows next steps
+   npm run test:manual:fast    # Same as above (explicit +5 minutes)
+   ```
+
+3. **What happens:**
+   - Server logs: `⚠️  FAST_TEST_DELIVERY_OFFSET active: 5 minutes - Events will trigger soon (TESTING ONLY)`
+   - Birthday events scheduled to trigger in 5 minutes
+   - Perfect for testing scheduler/worker flow end-to-end
+
+**Without Override:**
+```bash
+npm run dev                    # Uses default (9:00 AM local time)
+```
+Server logs: `✓ Using default delivery times (9:00 AM for birthdays)`
+
+**Important:**
+- ⚠️ **TESTING ONLY** - DO NOT use in production
+- Invalid format falls back to default (9am) - no error thrown
+- Production config will use AWS Parameter Store (separate feature in future stories)
+
+**Examples:**
+
+```bash
+# Test event execution in 30 seconds (ultra-fast)
+FAST_TEST_DELIVERY_OFFSET=30s npm run dev
+
+# Test event execution in 1 minute
+FAST_TEST_DELIVERY_OFFSET=1 npm run dev
+
+# Test event execution in 5 minutes (default)
+FAST_TEST_DELIVERY_OFFSET=5 npm run dev
+
+# Test event execution in 5 minutes (explicit)
+FAST_TEST_DELIVERY_OFFSET=5m npm run dev
+
+# Test event execution in 2 hours
+FAST_TEST_DELIVERY_OFFSET=120 npm run dev
+```
+
+**Future: Production Configuration (Next Stories)**
+
+When you need production delivery time config, create a new async resolution function:
+
+```typescript
+// Future Story: Per-user delivery preferences
+async function resolveDeliveryTimeConfig(
+  eventType: 'BIRTHDAY' | 'ANNIVERSARY',
+  userId?: string
+): Promise<EventDeliveryTimeConfig> {
+  // Priority 1: User-specific preference (from DB)
+  if (userId) {
+    const userPref = await db.getUserDeliveryPreference(userId, eventType);
+    if (userPref) return userPref;
+  }
+
+  // Priority 2: Global config (from Parameter Store)
+  const globalConfig = await parameterStore.getParameter('/app/event-delivery-times');
+  if (globalConfig) {
+    const times = JSON.parse(globalConfig.value);
+    if (times[eventType]) return times[eventType];
+  }
+
+  // Priority 3: Hardcoded defaults
+  return getDeliveryTimeConfig(eventType); // Current function (fallback)
+}
+```
+
+This keeps testing override separate from production config!
 
 ### Lambda Environment Variables
 

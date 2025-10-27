@@ -30,6 +30,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createServer, startServer } from './adapters/primary/http/server';
 import { registerUserRoutes } from './adapters/primary/http/routes/user.routes';
+import { isDeliveryTimeOverrideActive } from './modules/event-scheduling/config/delivery-time-config';
 
 /**
  * Initialize Prisma client
@@ -42,6 +43,17 @@ const prisma = new PrismaClient({
  * Create and configure Fastify server
  */
 const server = createServer();
+
+/**
+ * Story 4.5: Log delivery time configuration status
+ */
+if (isDeliveryTimeOverrideActive()) {
+  server.log.warn(
+    `⚠️  FAST_TEST_DELIVERY_OFFSET active: ${process.env['FAST_TEST_DELIVERY_OFFSET']} minutes - Events will trigger soon (TESTING ONLY)`
+  );
+} else {
+  server.log.info('✓ Using default delivery times (9:00 AM for birthdays)');
+}
 
 /**
  * Register routes

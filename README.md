@@ -284,6 +284,34 @@ npm run test:coverage       # Generate coverage report
 - Application layer: 80%+
 - Adapters: 80%+
 
+### Fast Manual E2E Testing
+
+For rapid manual testing of event scheduling (without waiting for 9:00 AM):
+
+```bash
+# Start server with delivery time override (triggers events in 5 minutes)
+FAST_TEST_DELIVERY_OFFSET=5 npm run dev
+
+# In another terminal, run the manual test script
+npm run test:manual         # Creates user and shows next steps
+npm run test:manual:fast    # Same as above (explicit +5 minutes)
+```
+
+**What it does:**
+- Creates a test user via API
+- Schedules birthday event to trigger in 5 minutes (instead of 9:00 AM)
+- Shows expected trigger time and monitoring instructions
+
+**Environment Variable:**
+- `FAST_TEST_DELIVERY_OFFSET={value}` - Events trigger in X time from now
+- Supports minutes and seconds:
+  - `5` or `5m` = 5 minutes
+  - `30s` = 30 seconds (ultra-fast)
+  - `120` or `120m` = 2 hours
+- Invalid format falls back to default (9am) - no error thrown
+- **TESTING ONLY** - DO NOT use in production
+- Future: Production config will use AWS Parameter Store (separate from this testing feature)
+
 See [Testing Guide](docs/testing-guide.md) for details.
 
 ---

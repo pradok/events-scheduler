@@ -12,9 +12,13 @@ import { CreateBirthdayEventUseCase } from '../../modules/event-scheduling/appli
 import { RescheduleBirthdayEventsUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleBirthdayEventsUseCase';
 import { RescheduleEventsOnTimezoneChangeUseCase } from '../../modules/event-scheduling/application/use-cases/RescheduleEventsOnTimezoneChangeUseCase';
 import { webhookConfig } from '../../modules/event-scheduling/config/webhook-config';
+import { getDeliveryTimeConfig } from '../../modules/event-scheduling/config/delivery-time-config';
 
 /**
  * Factory function to create and configure the event bus with all handlers
+ *
+ * **Story 4.5: Configurable Delivery Time Override**
+ * Uses delivery time config utility (reads EVENT_DELIVERY_TIMES env var or defaults).
  *
  * @param prisma - Prisma client for database access
  * @returns Configured InMemoryEventBus with all event handlers registered
@@ -26,7 +30,10 @@ export function createEventBus(prisma: PrismaClient): InMemoryEventBus {
   const eventRepository = new PrismaEventRepository(prisma);
   const timezoneService = new TimezoneService();
   const eventHandlerRegistry = new EventHandlerRegistry();
-  eventHandlerRegistry.register(new BirthdayEventHandler());
+
+  // Get config (from env var or default)
+  const birthdayConfig = getDeliveryTimeConfig('BIRTHDAY');
+  eventHandlerRegistry.register(new BirthdayEventHandler(birthdayConfig));
 
   // Create use cases
   const createBirthdayEventUseCase = new CreateBirthdayEventUseCase(
