@@ -17,37 +17,31 @@ echo -e "${BLUE}Complete E2E Environment Setup${NC}"
 echo "=========================================="
 echo ""
 echo "This script will:"
-echo "  1. Start Docker containers (PostgreSQL + LocalStack)"
-echo "  2. Run database migrations"
-echo "  3. Verify LocalStack resources"
-echo "  4. Build Lambda functions"
-echo "  5. Deploy Lambdas to LocalStack"
-echo "  6. Verify Lambda deployment"
-echo "  7. Start User API server (optional)"
+echo "  1. Reset Docker (delete all data - CLEAN SLATE)"
+echo "  2. Start Docker containers (PostgreSQL + LocalStack)"
+echo "  3. Run database migrations"
+echo "  4. Verify LocalStack resources"
+echo "  5. Build Lambda functions"
+echo "  6. Deploy Lambdas to LocalStack"
+echo "  7. Verify Lambda deployment"
+echo "  8. Start User API server (optional)"
 echo ""
-echo "Press Ctrl+C to cancel, or wait 3 seconds to continue..."
-sleep 3
+echo -e "${YELLOW}⚠  WARNING: This will delete all existing data!${NC}"
+echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+sleep 5
 
 # ==========================================
-# Step 1: Start Docker Services
+# Step 1: Reset Docker (Clean Slate)
 # ==========================================
 echo ""
-echo -e "${BLUE}[1/7] Starting Docker services...${NC}"
+echo -e "${BLUE}[1/8] Resetting Docker (clean slate)...${NC}"
 echo "=========================================="
 
 if docker ps | grep -q "bday-postgres\|bday-localstack"; then
-  echo -e "${YELLOW}⚠ Docker containers already running${NC}"
-  read -p "Do you want to restart them? (y/N): " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Stopping existing containers..."
-    npm run docker:stop
-    echo "Starting fresh containers..."
-    npm run docker:start
-  else
-    echo "Keeping existing containers running"
-  fi
+  echo "Stopping and removing existing containers + volumes..."
+  npm run docker:reset
 else
+  echo "No existing containers, starting fresh..."
   npm run docker:start
 fi
 
@@ -57,7 +51,7 @@ echo -e "${GREEN}✓ Docker services started${NC}"
 # Step 2: Run Database Migrations
 # ==========================================
 echo ""
-echo -e "${BLUE}[2/7] Running database migrations...${NC}"
+echo -e "${BLUE}[2/8] Running database migrations...${NC}"
 echo "=========================================="
 
 # Wait for PostgreSQL to be ready
@@ -86,7 +80,7 @@ echo -e "${GREEN}✓ Database migrations complete${NC}"
 # Step 3: Verify LocalStack Resources
 # ==========================================
 echo ""
-echo -e "${BLUE}[3/7] Verifying LocalStack resources...${NC}"
+echo -e "${BLUE}[3/8] Verifying LocalStack resources...${NC}"
 echo "=========================================="
 
 # Wait for LocalStack to be ready
@@ -115,7 +109,7 @@ echo -e "${GREEN}✓ LocalStack resources verified${NC}"
 # Step 4: Build Lambda Functions
 # ==========================================
 echo ""
-echo -e "${BLUE}[4/7] Building Lambda functions...${NC}"
+echo -e "${BLUE}[4/8] Building Lambda functions...${NC}"
 echo "=========================================="
 
 npm run lambda:build
@@ -126,7 +120,7 @@ echo -e "${GREEN}✓ Lambda functions built${NC}"
 # Step 5: Deploy Lambdas to LocalStack
 # ==========================================
 echo ""
-echo -e "${BLUE}[5/7] Deploying Lambdas to LocalStack...${NC}"
+echo -e "${BLUE}[5/8] Deploying Lambdas to LocalStack...${NC}"
 echo "=========================================="
 
 npm run lambda:deploy:localstack
@@ -137,7 +131,7 @@ echo -e "${GREEN}✓ Lambdas deployed${NC}"
 # Step 6: Verify Lambda Deployment
 # ==========================================
 echo ""
-echo -e "${BLUE}[6/7] Verifying Lambda deployment...${NC}"
+echo -e "${BLUE}[6/8] Verifying Lambda deployment...${NC}"
 echo "=========================================="
 
 npm run lambda:verify
@@ -148,7 +142,7 @@ echo -e "${GREEN}✓ Lambda deployment verified${NC}"
 # Step 7: Start User API Server (Optional)
 # ==========================================
 echo ""
-echo -e "${BLUE}[7/7] User API Server${NC}"
+echo -e "${BLUE}[7/8] User API Server${NC}"
 echo "=========================================="
 
 read -p "Do you want to start the User API server? (y/N): " -n 1 -r
