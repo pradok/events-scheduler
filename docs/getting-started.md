@@ -93,6 +93,21 @@ The system is now running locally. Here's what you have:
 
 ## What's Next?
 
+### Start User API Server (Optional)
+
+```bash
+npm run dev               # Start Fastify API with hot-reload
+```
+
+**Endpoints available:**
+
+- Health check: `GET http://localhost:3000/health`
+- Get user: `GET http://localhost:3000/user/:id`
+- Update user: `PUT http://localhost:3000/user/:id`
+- Delete user: `DELETE http://localhost:3000/user/:id`
+
+**Learn more:** [Local Development Guide](./local-development.md)
+
 ### Run Tests
 
 ```bash
@@ -111,7 +126,7 @@ npm run lambda:all        # Build and deploy scheduler/worker to LocalStack
 
 **Learn more:** [LocalStack Setup](./localstack-setup-community.md)
 
-### Develop Locally
+### Other Useful Commands
 
 - **Database UI:** `npm run prisma:studio` (opens at http://localhost:5555)
 - **View logs:** `npm run docker:logs`
@@ -160,6 +175,7 @@ npm run test:unit
 
 ```bash
 # Development
+npm run dev                 # Start User API server (http://localhost:3000)
 npm run docker:start        # Start PostgreSQL + LocalStack
 npm run docker:stop         # Stop containers (keep data)
 npm run docker:reset        # Nuclear option: delete everything and restart
