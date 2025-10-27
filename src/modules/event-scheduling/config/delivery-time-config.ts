@@ -18,6 +18,10 @@ import { EventDeliveryTimeConfig, EVENT_DELIVERY_TIMES } from './event-delivery-
  * ```
  * ⚠️ **TESTING ONLY** - Local development, manual E2E testing
  *
+ * **Important:** The offset is calculated in UTC timezone. When testing, ensure your
+ * test users also use UTC timezone to get predictable results. The returned hour/minute/second
+ * values are interpreted as local time in the user's timezone by the birthday handler.
+ *
  * **Fallback Behavior:**
  * - Invalid format → Use defaults (no error thrown)
  * - Out of range → Use defaults (no error thrown)
@@ -85,15 +89,17 @@ export function getDeliveryTimeConfig(
 ): EventDeliveryTimeConfig {
   const testOffset = process.env.FAST_TEST_DELIVERY_OFFSET;
 
-  // Fast test override → calculate now + offset
+  // Fast test override → calculate now + offset in UTC
+  // Using UTC ensures consistent behavior regardless of system timezone
   if (testOffset) {
     const offsetMinutes = parseTestOffset(testOffset);
     // If parsing failed, offsetMinutes will be null → use default
     if (offsetMinutes !== null) {
-      const targetTime = DateTime.now().plus({ minutes: offsetMinutes });
+      const targetTime = DateTime.utc().plus({ minutes: offsetMinutes });
       return {
         hour: targetTime.hour,
         minute: targetTime.minute,
+        second: targetTime.second,
       };
     }
   }

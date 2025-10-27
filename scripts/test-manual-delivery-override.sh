@@ -60,7 +60,9 @@ echo ""
 TEST_USER_FIRST_NAME="Test"
 TEST_USER_LAST_NAME="User-$(date +%s)"
 TEST_USER_DOB="1990-01-15"
-TEST_USER_TIMEZONE="America/New_York"
+# IMPORTANT: Use UTC timezone to match FAST_TEST_DELIVERY_OFFSET calculation
+# The offset is calculated in UTC, so user timezone must also be UTC for consistent behavior
+TEST_USER_TIMEZONE="UTC"
 
 # Calculate trigger time
 TRIGGER_TIME=$(date -u -v +${OFFSET_MINUTES}M "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || date -u -d "+${OFFSET_MINUTES} minutes" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null)

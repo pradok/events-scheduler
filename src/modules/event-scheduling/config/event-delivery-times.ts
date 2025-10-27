@@ -24,10 +24,12 @@
  * Configuration for event delivery time of day
  * @property hour - Hour of day (0-23) in user's timezone
  * @property minute - Minute of hour (0-59)
+ * @property second - Second of minute (0-59), defaults to 0
  */
 export interface EventDeliveryTimeConfig {
   hour: number; // 0-23
   minute: number; // 0-59
+  second?: number; // 0-59 (optional, defaults to 0)
 }
 
 /**

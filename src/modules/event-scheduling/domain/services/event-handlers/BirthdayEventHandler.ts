@@ -128,7 +128,7 @@ export class BirthdayEventHandler implements IEventHandler {
       day: targetDay,
       hour: this.config.hour,
       minute: this.config.minute,
-      second: 0,
+      second: this.config.second ?? 0,
       millisecond: 0,
     });
   }

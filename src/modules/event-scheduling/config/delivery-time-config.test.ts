@@ -26,13 +26,17 @@ describe('delivery-time-config', () => {
         it('should calculate dynamic config for 5 minutes (implicit)', () => {
           // Arrange
           process.env.FAST_TEST_DELIVERY_OFFSET = '5';
-          const before = DateTime.now();
+          const before = DateTime.utc();
 
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const configTime = DateTime.now().set({ hour: config.hour, minute: config.minute });
+          // Assert - config uses UTC time
+          const configTime = DateTime.utc().set({
+            hour: config.hour,
+            minute: config.minute,
+            second: config.second ?? 0,
+          });
           const diffMinutes = configTime.diff(before, 'minutes').minutes;
           expect(diffMinutes).toBeGreaterThanOrEqual(4);
           expect(diffMinutes).toBeLessThanOrEqual(6);
@@ -41,13 +45,17 @@ describe('delivery-time-config', () => {
         it('should calculate dynamic config for 5m (explicit)', () => {
           // Arrange
           process.env.FAST_TEST_DELIVERY_OFFSET = '5m';
-          const before = DateTime.now();
+          const before = DateTime.utc();
 
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const configTime = DateTime.now().set({ hour: config.hour, minute: config.minute });
+          // Assert - config uses UTC time
+          const configTime = DateTime.utc().set({
+            hour: config.hour,
+            minute: config.minute,
+            second: config.second ?? 0,
+          });
           const diffMinutes = configTime.diff(before, 'minutes').minutes;
           expect(diffMinutes).toBeGreaterThanOrEqual(4);
           expect(diffMinutes).toBeLessThanOrEqual(6);
@@ -56,13 +64,17 @@ describe('delivery-time-config', () => {
         it('should handle 1 minute (ultra-fast testing)', () => {
           // Arrange
           process.env.FAST_TEST_DELIVERY_OFFSET = '1';
-          const before = DateTime.now();
+          const before = DateTime.utc();
 
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const configTime = DateTime.now().set({ hour: config.hour, minute: config.minute });
+          // Assert - config uses UTC time
+          const configTime = DateTime.utc().set({
+            hour: config.hour,
+            minute: config.minute,
+            second: config.second ?? 0,
+          });
           const diffMinutes = configTime.diff(before, 'minutes').minutes;
           expect(diffMinutes).toBeGreaterThanOrEqual(0);
           expect(diffMinutes).toBeLessThanOrEqual(2);
@@ -75,8 +87,8 @@ describe('delivery-time-config', () => {
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const expected = DateTime.now().plus({ minutes: 120 });
+          // Assert - config uses UTC time
+          const expected = DateTime.utc().plus({ minutes: 120 });
           expect(config.hour).toBe(expected.hour);
           expect(config.minute).toBe(expected.minute);
         });
@@ -90,11 +102,11 @@ describe('delivery-time-config', () => {
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const expected = DateTime.now().plus({ seconds: 30 });
-          // Due to fractional seconds, we check hour and minute match
+          // Assert - config uses UTC time
+          const expected = DateTime.utc().plus({ seconds: 30 });
           expect(config.hour).toBe(expected.hour);
           expect(config.minute).toBe(expected.minute);
+          expect(config.second).toBe(expected.second);
         });
 
         it('should handle 90s (1.5 minutes)', () => {
@@ -104,10 +116,11 @@ describe('delivery-time-config', () => {
           // Act
           const config = getDeliveryTimeConfig('BIRTHDAY');
 
-          // Assert
-          const expected = DateTime.now().plus({ seconds: 90 });
+          // Assert - config uses UTC time
+          const expected = DateTime.utc().plus({ seconds: 90 });
           expect(config.hour).toBe(expected.hour);
           expect(config.minute).toBe(expected.minute);
+          expect(config.second).toBe(expected.second);
         });
       });
 

@@ -88,10 +88,9 @@ npm run docker:reset        # Nuclear option: delete everything and restart
 npm run docker:verify       # Verify LocalStack resources created
 npm run lambda:all          # Build and deploy Lambdas to LocalStack
 npm run prisma:studio       # Open database GUI (port 5555)
-npm test                    # Run all tests
-npm run test:unit           # Unit tests only
-npm run test:integration    # Integration tests
-npm run test:e2e            # End-to-end tests
+npm test                    # Run unit tests (fast, no setup)
+npm run test:integration    # Integration tests (requires database)
+npm run test:e2e            # End-to-end tests (full setup)
 ```
 
 ---
@@ -148,6 +147,7 @@ See [Tech Stack Documentation](docs/architecture/tech-stack.md) for rationale.
 ### Architecture & Design
 - **[Architecture Overview](docs/architecture.md)** - System design and patterns
 - **[Design Patterns](docs/architecture/design-patterns.md)** - Distributed Scheduler, FOR UPDATE SKIP LOCKED
+- **[Timezone Handling](docs/architecture/timezone-handling.md)** - How timezones work (beginner-friendly!)
 - **[Tech Stack](docs/architecture/tech-stack.md)** - Technology choices
 - **[Infrastructure](docs/architecture/infrastructure.md)** - AWS deployment options
 
@@ -273,11 +273,15 @@ This project uses **BMAD (Business-to-Market Accelerated Delivery)**:
 ## Testing
 
 ```bash
-npm run test:unit           # Unit tests (domain logic)
-npm run test:integration    # Integration tests (real database)
-npm run test:e2e            # End-to-end tests (LocalStack + database)
+npm test                    # Unit tests only (default, fast, no setup needed)
+npm run test:unit           # Same as above (alias)
+npm run test:integration    # Integration tests (requires database)
+npm run test:e2e            # End-to-end tests (requires LocalStack + database)
 npm run test:coverage       # Generate coverage report
+npm run test:watch          # Unit tests in watch mode (VSCode Jest plugin compatible)
 ```
+
+**Default behavior:** `npm test` runs **unit tests only** - fast, no Docker/database setup required. Perfect for development and VSCode Jest plugin.
 
 **Coverage Targets:**
 - Domain layer: 100%
