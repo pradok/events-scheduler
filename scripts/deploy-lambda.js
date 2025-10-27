@@ -103,6 +103,7 @@ async function deploySchedulerLambda(queueUrl) {
           AWS_REGION: 'us-east-1',
           NODE_ENV: 'production',
           LOG_LEVEL: 'info',
+          NODE_OPTIONS: '--enable-source-maps',
         },
       },
     })
@@ -201,6 +202,7 @@ async function deployWorkerLambda(queueUrl, queueArn) {
           AWS_REGION: 'us-east-1',
           NODE_ENV: 'production',
           LOG_LEVEL: 'info',
+          NODE_OPTIONS: '--enable-source-maps',
         },
       },
     })

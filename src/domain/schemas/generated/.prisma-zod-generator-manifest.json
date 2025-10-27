@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatorVersion": "1.0.0",
-  "generatedAt": "2025-10-24T04:53:00.331Z",
+  "generatedAt": "2025-10-27T02:04:15.830Z",
   "outputPath": "/Users/prad-igodirect/_projects/bday/src/domain/schemas/generated",
   "files": [
     "schemas/enums/TransactionIsolationLevel.schema.ts",
