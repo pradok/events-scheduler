@@ -20,6 +20,7 @@ Practical how-to guides for developers:
 |-------|-------------|-----------|
 | **[Local Development](./local-development.md)** | Docker, npm scripts, database management | 5 min |
 | **[LocalStack Setup](./localstack-setup-community.md)** | AWS service emulation (Community Edition) | 7 min |
+| **[LocalStack Desktop](./localstack-desktop-setup.md)** | GUI tool for managing LocalStack (Recommended) | 8 min |
 | **[Testing Guide](./testing-guide.md)** | Running and writing unit/integration/E2E tests | 6 min |
 | **[Debugging Guide](./debugging.md)** | Troubleshooting common issues | 5 min |
 
@@ -137,6 +138,7 @@ docs/
 ├── getting-started.md                  ← Quick start (5 min)
 ├── local-development.md                ← Development guide
 ├── localstack-setup-community.md       ← LocalStack setup
+├── localstack-desktop-setup.md         ← LocalStack Desktop GUI
 ├── testing-guide.md                    ← Testing guide
 ├── debugging.md                        ← Troubleshooting
 ├── architecture.md                     ← Architecture overview

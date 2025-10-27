@@ -80,7 +80,7 @@ LocalStack is a **fully functional local AWS cloud stack** that runs in Docker. 
 
 ### Optional Tools
 
-- **LocalStack Desktop** - GUI for managing LocalStack (see Story 4.3)
+- **LocalStack Desktop** - GUI for managing LocalStack (see [LocalStack Desktop Setup Guide](./localstack-desktop-setup.md))
 - **jq** - JSON parsing for command-line (`brew install jq` - optional)
 
 ---
@@ -454,14 +454,15 @@ LocalStack Community Edition (FREE) does **NOT** support:
 
 After LocalStack is verified:
 
-1. **Deploy Lambdas to LocalStack** (Story 4.4)
+1. **Set Up LocalStack Desktop** (Story 4.3 - Recommended)
+   - See [LocalStack Desktop Setup Guide](./localstack-desktop-setup.md)
+   - Browse resources visually with GUI
+   - Manage containers and view logs
+
+2. **Deploy Lambdas to LocalStack** (Story 4.4)
    ```bash
    npm run lambda:all
    ```
-
-2. **Configure VSCode LocalStack Extension** (Story 4.3 - Optional)
-   - Browse resources visually
-   - View CloudWatch logs in IDE
 
 3. **Run E2E Tests** (Story 4.6)
    ```bash

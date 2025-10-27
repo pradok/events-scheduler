@@ -877,6 +877,7 @@ npm run prisma:generate
 
 - **Run Tests:** See [Testing Guide](./testing-guide.md)
 - **Setup LocalStack:** See [LocalStack Setup](./localstack-setup-community.md)
+- **LocalStack Desktop:** See [LocalStack Desktop Setup Guide](./localstack-desktop-setup.md) (Recommended GUI tool)
 - **Troubleshooting:** See [Debugging Guide](./debugging.md)
 - **Architecture:** See [Architecture Documentation](./architecture.md)
 
