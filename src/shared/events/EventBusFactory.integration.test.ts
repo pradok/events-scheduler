@@ -324,4 +324,193 @@ describe('EventBusFactory - Integration Tests with FAST_TEST_DELIVERY_OFFSET', (
       expect(targetTimeLocal.day).toBe(15);
     });
   });
+
+  describe('UserCreated event with EVENT_DELIVERY_TIMES_OVERRIDE', () => {
+    it('should create birthday event with direct time override (works with any timezone)', async () => {
+      // Arrange - Set direct time override
+      const now = DateTime.now().setZone('America/New_York'); // Test with EDT timezone
+      const targetTime = now.plus({ seconds: 10 });
+
+      // Set override to 10 seconds from now in America/New_York timezone
+      process.env.EVENT_DELIVERY_TIMES_OVERRIDE = `${targetTime.hour}:${targetTime.minute}:${targetTime.second}`;
+
+      // IMPORTANT: Create EventBus AFTER setting env var
+      const eventBus = createEventBus(prisma);
+
+      const userId = randomUUID();
+
+      // Use TODAY as birthday in user's timezone (America/New_York)
+      const birthdayToday = now.toFormat('yyyy-MM-dd');
+
+      const userCreatedEvent: UserCreatedEvent = {
+        eventType: 'UserCreated',
+        context: 'user',
+        occurredAt: now.toISO()!,
+        aggregateId: userId,
+        userId: userId,
+        firstName: 'Test',
+        lastName: 'User',
+        dateOfBirth: birthdayToday, // Birthday is TODAY
+        timezone: 'America/New_York', // Can use ANY timezone (not just UTC)!
+      };
+
+      // Create user in DB first (for foreign key constraint)
+      await prisma.user.create({
+        data: {
+          id: userId,
+          firstName: 'Test',
+          lastName: 'User',
+          dateOfBirth: new Date(`${birthdayToday}T00:00:00Z`),
+          timezone: 'America/New_York',
+        },
+      });
+
+      // Capture time before publishing event in user's timezone
+      const beforePublish = DateTime.now().setZone('America/New_York');
+
+      // Act - Publish UserCreated event
+      await eventBus.publish(userCreatedEvent);
+
+      // Wait a moment for async handler to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Assert - Retrieve the event from database
+      const events = await prisma.event.findMany({
+        where: { userId },
+      });
+
+      expect(events).toHaveLength(1);
+      const createdEvent = events[0]!;
+
+      // Verify event type
+      expect(createdEvent.eventType).toBe('BIRTHDAY');
+      expect(createdEvent.status).toBe('PENDING');
+
+      // Verify the event is scheduled for approximately 10 seconds from now in America/New_York
+      const targetTimeInUserZone = DateTime.fromJSDate(createdEvent.targetTimestampUTC, {
+        zone: 'utc',
+      }).setZone('America/New_York');
+
+      const diffSeconds = targetTimeInUserZone.diff(beforePublish, 'seconds').seconds;
+
+      // Should be approximately 10 seconds (allow 8-12 seconds for test execution)
+      expect(diffSeconds).toBeGreaterThanOrEqual(8);
+      expect(diffSeconds).toBeLessThanOrEqual(12);
+
+      // Clean up env var for next test
+      delete process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
+    });
+
+    it('should work with UTC timezone user', async () => {
+      // Arrange
+      const now = DateTime.utc();
+      const targetTime = now.plus({ seconds: 15 });
+
+      process.env.EVENT_DELIVERY_TIMES_OVERRIDE = `${targetTime.hour}:${targetTime.minute}:${targetTime.second}`;
+      const eventBus = createEventBus(prisma);
+
+      const userId = randomUUID();
+      const birthdayToday = now.toFormat('yyyy-MM-dd');
+
+      const userCreatedEvent: UserCreatedEvent = {
+        eventType: 'UserCreated',
+        context: 'user',
+        occurredAt: now.toISO(),
+        aggregateId: userId,
+        userId: userId,
+        firstName: 'Test',
+        lastName: 'User',
+        dateOfBirth: birthdayToday,
+        timezone: 'UTC',
+      };
+
+      await prisma.user.create({
+        data: {
+          id: userId,
+          firstName: 'Test',
+          lastName: 'User',
+          dateOfBirth: new Date(`${birthdayToday}T00:00:00Z`),
+          timezone: 'UTC',
+        },
+      });
+
+      const beforePublish = DateTime.utc();
+
+      // Act
+      await eventBus.publish(userCreatedEvent);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Assert
+      const events = await prisma.event.findMany({
+        where: { userId },
+      });
+
+      expect(events).toHaveLength(1);
+      const createdEvent = events[0]!;
+
+      const targetTimeUTC = DateTime.fromJSDate(createdEvent.targetTimestampUTC, { zone: 'utc' });
+      const diffSeconds = targetTimeUTC.diff(beforePublish, 'seconds').seconds;
+
+      expect(diffSeconds).toBeGreaterThanOrEqual(13);
+      expect(diffSeconds).toBeLessThanOrEqual(17);
+
+      delete process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
+    });
+
+    it('should take priority over FAST_TEST_DELIVERY_OFFSET', async () => {
+      // Arrange - Set both env vars
+      process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '15:30:45';
+      process.env.FAST_TEST_DELIVERY_OFFSET = '5m';
+
+      const eventBus = createEventBus(prisma);
+
+      const userId = randomUUID();
+      const now = DateTime.utc();
+      const birthdayToday = now.toFormat('yyyy-MM-dd');
+
+      const userCreatedEvent: UserCreatedEvent = {
+        eventType: 'UserCreated',
+        context: 'user',
+        occurredAt: now.toISO(),
+        aggregateId: userId,
+        userId: userId,
+        firstName: 'Test',
+        lastName: 'User',
+        dateOfBirth: birthdayToday,
+        timezone: 'UTC',
+      };
+
+      await prisma.user.create({
+        data: {
+          id: userId,
+          firstName: 'Test',
+          lastName: 'User',
+          dateOfBirth: new Date(`${birthdayToday}T00:00:00Z`),
+          timezone: 'UTC',
+        },
+      });
+
+      // Act
+      await eventBus.publish(userCreatedEvent);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Assert - Should use EVENT_DELIVERY_TIMES_OVERRIDE (15:30:45), not FAST_TEST_DELIVERY_OFFSET
+      const events = await prisma.event.findMany({
+        where: { userId },
+      });
+
+      expect(events).toHaveLength(1);
+      const createdEvent = events[0]!;
+
+      const targetTimeUTC = DateTime.fromJSDate(createdEvent.targetTimestampUTC, { zone: 'utc' });
+
+      // Should be scheduled for 15:30:45 UTC (not 5 minutes from now)
+      expect(targetTimeUTC.hour).toBe(15);
+      expect(targetTimeUTC.minute).toBe(30);
+      expect(targetTimeUTC.second).toBe(45);
+
+      delete process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
+      delete process.env.FAST_TEST_DELIVERY_OFFSET;
+    });
+  });
 });

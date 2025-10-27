@@ -3,10 +3,12 @@ import { getDeliveryTimeConfig, isDeliveryTimeOverrideActive } from './delivery-
 
 describe('delivery-time-config', () => {
   beforeEach(() => {
+    delete process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
     delete process.env.FAST_TEST_DELIVERY_OFFSET;
   });
 
   afterEach(() => {
+    delete process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
     delete process.env.FAST_TEST_DELIVERY_OFFSET;
   });
 
@@ -18,6 +20,97 @@ describe('delivery-time-config', () => {
 
         // Assert
         expect(config).toEqual({ hour: 9, minute: 0 });
+      });
+    });
+
+    describe('EVENT_DELIVERY_TIMES_OVERRIDE (Priority 1)', () => {
+      it('should parse HH:MM:SS format', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '13:25:52';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert
+        expect(config).toEqual({ hour: 13, minute: 25, second: 52 });
+      });
+
+      it('should parse HH:MM format (defaults second to 0)', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '14:30';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert
+        expect(config).toEqual({ hour: 14, minute: 30, second: 0 });
+      });
+
+      it('should parse single digit hours and minutes', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '9:5:3';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert
+        expect(config).toEqual({ hour: 9, minute: 5, second: 3 });
+      });
+
+      it('should reject invalid hour (> 23)', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '25:00:00';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert - fallback to default
+        expect(config).toEqual({ hour: 9, minute: 0 });
+      });
+
+      it('should reject invalid minute (> 59)', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '13:60:00';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert - fallback to default
+        expect(config).toEqual({ hour: 9, minute: 0 });
+      });
+
+      it('should reject invalid second (> 59)', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '13:25:60';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert - fallback to default
+        expect(config).toEqual({ hour: 9, minute: 0 });
+      });
+
+      it('should reject invalid format', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = 'invalid';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert - fallback to default
+        expect(config).toEqual({ hour: 9, minute: 0 });
+      });
+
+      it('should take priority over FAST_TEST_DELIVERY_OFFSET', () => {
+        // Arrange
+        process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '15:30:45';
+        process.env.FAST_TEST_DELIVERY_OFFSET = '5m';
+
+        // Act
+        const config = getDeliveryTimeConfig('BIRTHDAY');
+
+        // Assert - uses EVENT_DELIVERY_TIMES_OVERRIDE, not FAST_TEST_DELIVERY_OFFSET
+        expect(config).toEqual({ hour: 15, minute: 30, second: 45 });
       });
     });
 
@@ -195,7 +288,7 @@ describe('delivery-time-config', () => {
   });
 
   describe('isDeliveryTimeOverrideActive', () => {
-    it('should return false when env var not set', () => {
+    it('should return false when no env var set', () => {
       // Act
       const isActive = isDeliveryTimeOverrideActive();
 
@@ -203,8 +296,31 @@ describe('delivery-time-config', () => {
       expect(isActive).toBe(false);
     });
 
+    it('should return true when EVENT_DELIVERY_TIMES_OVERRIDE is set', () => {
+      // Arrange
+      process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '13:25:52';
+
+      // Act
+      const isActive = isDeliveryTimeOverrideActive();
+
+      // Assert
+      expect(isActive).toBe(true);
+    });
+
     it('should return true when FAST_TEST_DELIVERY_OFFSET is set', () => {
       // Arrange
+      process.env.FAST_TEST_DELIVERY_OFFSET = '5';
+
+      // Act
+      const isActive = isDeliveryTimeOverrideActive();
+
+      // Assert
+      expect(isActive).toBe(true);
+    });
+
+    it('should return true when both are set', () => {
+      // Arrange
+      process.env.EVENT_DELIVERY_TIMES_OVERRIDE = '13:25:52';
       process.env.FAST_TEST_DELIVERY_OFFSET = '5';
 
       // Act

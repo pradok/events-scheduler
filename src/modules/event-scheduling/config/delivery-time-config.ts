@@ -80,42 +80,15 @@ import { EventDeliveryTimeConfig, EVENT_DELIVERY_TIMES } from './event-delivery-
  * // Returns: { hour: <now + 30 sec>, minute: <now + 30 sec> }
  *
  * @example
+ * // With ENV: FAST_TEST_DELIVERY_TIMES_OVERRIDE=13:25:52
+ * const config = getDeliveryTimeConfig('BIRTHDAY');
+ * // Returns: { hour: 13, minute: 25, second: 52 }
+ *
+ * @example
  * // With ENV: FAST_TEST_DELIVERY_OFFSET=invalid
  * const config = getDeliveryTimeConfig('BIRTHDAY');
  * // Returns: { hour: 9, minute: 0 } (fallback to default)
  */
-export function getDeliveryTimeConfig(
-  eventType: 'BIRTHDAY' | 'ANNIVERSARY'
-): EventDeliveryTimeConfig {
-  const testOffset = process.env.FAST_TEST_DELIVERY_OFFSET;
-
-  // Fast test override → calculate now + offset in UTC
-  // Using UTC ensures consistent behavior regardless of system timezone
-  if (testOffset) {
-    const offsetMinutes = parseTestOffset(testOffset);
-    // If parsing failed, offsetMinutes will be null → use default
-    if (offsetMinutes !== null) {
-      const targetTime = DateTime.utc().plus({ minutes: offsetMinutes });
-      return {
-        hour: targetTime.hour,
-        minute: targetTime.minute,
-        second: targetTime.second,
-      };
-    }
-  }
-
-  // No override or invalid format → use default
-  return getDefaultConfig(eventType);
-}
-
-/**
- * Check if fast test delivery override is active
- *
- * @returns true if FAST_TEST_DELIVERY_OFFSET env var is set, false otherwise
- */
-export function isDeliveryTimeOverrideActive(): boolean {
-  return !!process.env.FAST_TEST_DELIVERY_OFFSET;
-}
 
 /**
  * Get default delivery time config
@@ -131,6 +104,46 @@ function getDefaultConfig(eventType: 'BIRTHDAY' | 'ANNIVERSARY'): EventDeliveryT
     throw new Error('ANNIVERSARY event type not yet implemented');
   }
   return EVENT_DELIVERY_TIMES[eventType];
+}
+
+/**
+ * Parse time override value in HH:MM:SS or HH:MM format
+ *
+ * Supported formats:
+ * - "13:25:52" → { hour: 13, minute: 25, second: 52 }
+ * - "13:25"    → { hour: 13, minute: 25, second: 0 }
+ * - "9:00"     → { hour: 9, minute: 0, second: 0 }
+ *
+ * Invalid formats return null (fallback to default):
+ * - "25:00"    → null (hour > 23)
+ * - "13:60"    → null (minute > 59)
+ * - "13:25:60" → null (second > 59)
+ * - "abc"      → null (not a time)
+ *
+ * This allows direct control over delivery time for testing WITHOUT
+ * requiring UTC user timezone (unlike FAST_TEST_DELIVERY_OFFSET).
+ *
+ * @param value - Time string in HH:MM:SS or HH:MM format
+ * @returns Parsed config or null if invalid
+ * @private
+ */
+function parseTimeOverride(value: string): EventDeliveryTimeConfig | null {
+  const trimmed = value.trim();
+
+  // Match HH:MM:SS or HH:MM format
+  const match = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!match) return null;
+
+  const hour = parseInt(match[1]!, 10);
+  const minute = parseInt(match[2]!, 10);
+  const second = match[3] ? parseInt(match[3], 10) : 0;
+
+  // Validate ranges
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) return null;
+  if (Number.isNaN(minute) || minute < 0 || minute > 59) return null;
+  if (Number.isNaN(second) || second < 0 || second > 59) return null;
+
+  return { hour, minute, second };
 }
 
 /**
@@ -183,4 +196,46 @@ function parseTestOffset(value: string): number | null {
   }
 
   return offsetMinutes;
+}
+
+export function getDeliveryTimeConfig(
+  eventType: 'BIRTHDAY' | 'ANNIVERSARY'
+): EventDeliveryTimeConfig {
+  // Priority 1: EVENT_DELIVERY_TIMES_OVERRIDE - Direct time override (hour:minute:second)
+  // Format: "13:25:52" - Works with ANY user timezone (cleaner for testing)
+  const timeOverride = process.env.EVENT_DELIVERY_TIMES_OVERRIDE;
+  if (timeOverride) {
+    const parsed = parseTimeOverride(timeOverride);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  // Priority 2: FAST_TEST_DELIVERY_OFFSET - Calculate now + offset in UTC
+  // Format: "10s" or "5m" - Requires UTC user timezone for correct behavior
+  const testOffset = process.env.FAST_TEST_DELIVERY_OFFSET;
+  if (testOffset) {
+    const offsetMinutes = parseTestOffset(testOffset);
+    // If parsing failed, offsetMinutes will be null → use default
+    if (offsetMinutes !== null) {
+      const targetTime = DateTime.utc().plus({ minutes: offsetMinutes });
+      return {
+        hour: targetTime.hour,
+        minute: targetTime.minute,
+        second: targetTime.second,
+      };
+    }
+  }
+
+  // Priority 3: No override or invalid format → use default
+  return getDefaultConfig(eventType);
+}
+
+/**
+ * Check if fast test delivery override is active
+ *
+ * @returns true if EVENT_DELIVERY_TIMES_OVERRIDE or FAST_TEST_DELIVERY_OFFSET env var is set, false otherwise
+ */
+export function isDeliveryTimeOverrideActive(): boolean {
+  return !!process.env.EVENT_DELIVERY_TIMES_OVERRIDE || !!process.env.FAST_TEST_DELIVERY_OFFSET;
 }
