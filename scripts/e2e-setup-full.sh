@@ -24,7 +24,7 @@ echo "  4. Verify LocalStack resources"
 echo "  5. Build Lambda functions"
 echo "  6. Deploy Lambdas to LocalStack"
 echo "  7. Verify Lambda deployment"
-echo "  8. Start User API server (optional)"
+echo "  8. Start User API server at http://localhost:3000"
 echo ""
 echo -e "${YELLOW}⚠  WARNING: This will delete all existing data!${NC}"
 echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
@@ -139,33 +139,30 @@ npm run lambda:verify
 echo -e "${GREEN}✓ Lambda deployment verified${NC}"
 
 # ==========================================
-# Step 7: Start User API Server (Optional)
+# Step 7: Start User API Server
 # ==========================================
 echo ""
-echo -e "${BLUE}[7/8] User API Server${NC}"
+echo -e "${BLUE}[7/8] Starting User API Server${NC}"
 echo "=========================================="
 
-read -p "Do you want to start the User API server? (y/N): " -n 1 -r
-echo
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  echo ""
-  echo -e "${YELLOW}Starting User API server...${NC}"
-  echo ""
-  echo "The API server will run in the foreground."
-  echo "Press Ctrl+C to stop the server when done testing."
-  echo ""
-  echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
-  echo ""
-  sleep 2
-  npm run dev
-else
-  echo ""
-  echo -e "${YELLOW}Skipping API server startup${NC}"
-  echo ""
-  echo "You can start it manually later with:"
-  echo "  npm run dev"
+# Check if API server is already running and kill it
+if lsof -ti:3000 > /dev/null 2>&1; then
+  echo -e "${YELLOW}API server already running on port 3000, stopping it...${NC}"
+  kill -9 $(lsof -ti:3000) 2>/dev/null || true
+  sleep 1
+  echo -e "${GREEN}✓ Stopped existing API server${NC}"
 fi
+
+echo ""
+echo -e "${YELLOW}Starting User API server...${NC}"
+echo ""
+echo "The API server will run in the foreground."
+echo "Press Ctrl+C to stop the server when done testing."
+echo ""
+echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
+echo ""
+sleep 2
+npm run dev
 
 # ==========================================
 # Summary
@@ -180,9 +177,7 @@ echo "  ✓ PostgreSQL    - localhost:5432"
 echo "  ✓ LocalStack    - http://localhost:4566"
 echo "  ✓ Scheduler Lambda - EventBridge trigger (1 min)"
 echo "  ✓ Worker Lambda    - SQS trigger"
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  echo "  ✓ User API      - http://localhost:3000"
-fi
+echo "  ✓ User API      - http://localhost:3000"
 echo ""
 echo "Management Tools:"
 echo "  - LocalStack Desktop: View Lambdas, SQS, CloudWatch Logs"

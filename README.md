@@ -12,7 +12,33 @@ A distributed, timezone-aware event scheduling system that triggers events at sp
 - **Docker Desktop** (for PostgreSQL + LocalStack)
 - **npm 10+**
 
-### 5-Minute Setup
+### ⚡ Complete E2E Environment Setup (One Command!)
+
+**For quick handoff or full production-like testing:**
+
+```bash
+npm install                 # First time only
+npm run e2e:setup           # Starts EVERYTHING: Docker, DB, Lambdas, API server
+npm run e2e:verify          # Verify all services running (26 checks)
+```
+
+**What it does:**
+
+- 🔄 Clean slate reset (deletes all data & creates fresh DB)
+- 🐳 Starts PostgreSQL + LocalStack containers
+- 🗄️ Runs database migrations (`prisma:migrate`)
+- ⚡ Builds and deploys Lambda functions
+- 🚀 Starts User API server at <http://localhost:3000>
+
+**Perfect for:** Handing off to QA, new developers, or full system testing.
+
+See [E2E Testing Guide](docs/e2e-testing-guide.md) for details.
+
+---
+
+### 5-Minute Manual Setup
+
+**If you prefer step-by-step control:**
 
 ```bash
 # 1. Install dependencies
@@ -67,15 +93,6 @@ npm run test:unit           # Unit tests only
 npm run test:integration    # Integration tests
 npm run test:e2e            # End-to-end tests
 ```
-
-### Complete E2E Environment Setup
-
-```bash
-npm run e2e:setup           # One-command: Start everything + deploy Lambdas
-npm run e2e:verify          # Verify all services running (26 checks)
-```
-
-See [E2E Testing Guide](docs/e2e-testing-guide.md) for production-like local testing.
 
 ---
 
