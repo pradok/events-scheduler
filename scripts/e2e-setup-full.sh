@@ -2,6 +2,15 @@
 
 # Complete End-to-End Setup Script
 # Sets up production-like local environment with all services for E2E testing
+#
+# Usage:
+#   ./scripts/e2e-setup-full.sh [OFFSET]
+#
+# Examples:
+#   ./scripts/e2e-setup-full.sh           # No offset (default 9am)
+#   ./scripts/e2e-setup-full.sh 10s       # FAST_TEST_DELIVERY_OFFSET (UTC timezone required)
+#   ./scripts/e2e-setup-full.sh OVERRIDE  # EVENT_DELIVERY_TIMES_OVERRIDE (any timezone)
+#   ./scripts/e2e-setup-full.sh 5m        # FAST_TEST_DELIVERY_OFFSET with 5 minutes
 
 set -e
 
@@ -11,6 +20,20 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+# Get argument and determine which override to use
+OFFSET_ARG=${1:-""}
+FAST_TEST_DELIVERY_OFFSET=""
+EVENT_DELIVERY_TIMES_OVERRIDE=""
+
+# Special keyword "OVERRIDE" means use EVENT_DELIVERY_TIMES_OVERRIDE
+if [ "$OFFSET_ARG" = "OVERRIDE" ]; then
+  # Calculate time 10 seconds from now in HH:MM:SS format
+  EVENT_DELIVERY_TIMES_OVERRIDE=$(date -u -v +10S "+%H:%M:%S" 2>/dev/null || date -u -d "+10 seconds" "+%H:%M:%S" 2>/dev/null)
+elif [ -n "$OFFSET_ARG" ]; then
+  # Otherwise use FAST_TEST_DELIVERY_OFFSET (existing behavior)
+  FAST_TEST_DELIVERY_OFFSET="$OFFSET_ARG"
+fi
 
 echo "=========================================="
 echo -e "${BLUE}Complete E2E Environment Setup${NC}"
@@ -25,6 +48,17 @@ echo "  5. Build Lambda functions"
 echo "  6. Deploy Lambdas to LocalStack"
 echo "  7. Verify Lambda deployment"
 echo "  8. Start User API server at http://localhost:3000"
+
+if [ -n "$EVENT_DELIVERY_TIMES_OVERRIDE" ]; then
+  echo ""
+  echo -e "${YELLOW}⚡ EVENT_DELIVERY_TIMES_OVERRIDE=${EVENT_DELIVERY_TIMES_OVERRIDE}${NC}"
+  echo -e "${YELLOW}   Events will trigger at ${EVENT_DELIVERY_TIMES_OVERRIDE} (works with any timezone)${NC}"
+elif [ -n "$FAST_TEST_DELIVERY_OFFSET" ]; then
+  echo ""
+  echo -e "${YELLOW}⚡ FAST_TEST_DELIVERY_OFFSET=${FAST_TEST_DELIVERY_OFFSET}${NC}"
+  echo -e "${YELLOW}   Events will trigger in ${FAST_TEST_DELIVERY_OFFSET} (UTC timezone required)${NC}"
+fi
+
 echo ""
 echo -e "${YELLOW}⚠  WARNING: This will delete all existing data!${NC}"
 echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
@@ -159,10 +193,25 @@ echo ""
 echo "The API server will run in the foreground."
 echo "Press Ctrl+C to stop the server when done testing."
 echo ""
-echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
-echo ""
-sleep 2
-npm run dev
+
+if [ -n "$EVENT_DELIVERY_TIMES_OVERRIDE" ]; then
+  echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
+  echo -e "${YELLOW}⚡ EVENT_DELIVERY_TIMES_OVERRIDE=${EVENT_DELIVERY_TIMES_OVERRIDE}${NC}"
+  echo ""
+  sleep 2
+  EVENT_DELIVERY_TIMES_OVERRIDE=$EVENT_DELIVERY_TIMES_OVERRIDE npm run dev
+elif [ -n "$FAST_TEST_DELIVERY_OFFSET" ]; then
+  echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
+  echo -e "${YELLOW}⚡ FAST_TEST_DELIVERY_OFFSET=${FAST_TEST_DELIVERY_OFFSET}${NC}"
+  echo ""
+  sleep 2
+  FAST_TEST_DELIVERY_OFFSET=$FAST_TEST_DELIVERY_OFFSET npm run dev
+else
+  echo -e "${GREEN}API server starting at http://localhost:3000${NC}"
+  echo ""
+  sleep 2
+  npm run dev
+fi
 
 # ==========================================
 # Summary

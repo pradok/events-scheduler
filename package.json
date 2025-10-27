@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server-standalone.ts",
+    "dev:override": "./scripts/start-dev-with-override.sh",
     "start": "node dist/server.js",
     "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --sourcemap",
     "build:server": "esbuild src/server-standalone.ts --bundle --platform=node --outfile=dist/server.js --sourcemap",
@@ -46,6 +47,7 @@
     "lambda:all": "npm run lambda:build && npm run lambda:deploy:localstack",
     "e2e:setup": "./scripts/e2e-setup-full.sh",
     "e2e:verify": "./scripts/e2e-verify-full.sh",
+    "e2e:create-user-today-trigger-event": "node scripts/create-test-user-today.js",
     "webhook:mock": "node ./scripts/mock-webhook-server.js",
     "prepare": "husky install"
   },

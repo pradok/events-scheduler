@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import { CreateUserUseCase } from '../../../../modules/user/application/use-cases/CreateUserUseCase';
 import { GetUserUseCase } from '../../../../modules/user/application/use-cases/GetUserUseCase';
 import { UpdateUserUseCase } from '../../../../modules/user/application/use-cases/UpdateUserUseCase';
 import { DeleteUserUseCase } from '../../../../modules/user/application/use-cases/DeleteUserUseCase';
 import { PrismaUserRepository } from '../../../../modules/user/adapters/persistence/PrismaUserRepository';
 import { createEventBus } from '../../../../shared/events/EventBusFactory';
 import {
+  CreateUserSchema,
   GetUserParamsSchema,
   UpdateUserSchema,
   UserResponseSchema,
@@ -17,6 +19,7 @@ import type { User } from '../../../../modules/user/domain/entities/User';
  * User Routes Module
  *
  * Implements REST API endpoints for user CRUD operations:
+ * - POST /user - Create new user (publishes UserCreated event)
  * - GET /user/:id - Retrieve user by ID
  * - PUT /user/:id - Update user (with event rescheduling)
  * - DELETE /user/:id - Delete user (with cascade delete of events)
@@ -58,6 +61,46 @@ function mapUserToResponse(user: User): UserResponse {
  * @param prisma - Prisma client for database access
  */
 export function registerUserRoutes(server: FastifyInstance, prisma: PrismaClient): void {
+  /**
+   * POST /user - Create a new user
+   *
+   * **Request Body:** CreateUserDTO
+   * - firstName: string (1-100 characters, required)
+   * - lastName: string (1-100 characters, required)
+   * - dateOfBirth: string (YYYY-MM-DD format, required)
+   * - timezone: string (IANA timezone, required)
+   *
+   * **Business Logic:**
+   * - Creates user in database
+   * - Publishes UserCreated event
+   * - Event handler will create birthday event asynchronously
+   *
+   * **Response Codes:**
+   * - 201: User created successfully
+   * - 400: Invalid input (validation failed)
+   * - 500: Internal server error
+   */
+  server.post<{
+    Body: unknown;
+  }>('/user', async (request, reply) => {
+    // Validate body
+    const body = CreateUserSchema.parse(request.body);
+
+    // Instantiate dependencies
+    const userRepository = new PrismaUserRepository(prisma);
+    const eventBus = createEventBus(prisma);
+
+    const createUserUseCase = new CreateUserUseCase(userRepository, eventBus);
+
+    // Execute use case
+    const createdUser = await createUserUseCase.execute(body);
+
+    // Map to response schema and validate
+    const response = UserResponseSchema.parse(mapUserToResponse(createdUser));
+
+    return reply.status(201).send(response);
+  });
+
   /**
    * GET /user/:id - Retrieve a user by ID
    *

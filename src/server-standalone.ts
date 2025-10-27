@@ -48,9 +48,15 @@ const server = createServer();
  * Story 4.5: Log delivery time configuration status
  */
 if (isDeliveryTimeOverrideActive()) {
-  server.log.warn(
-    `⚠️  FAST_TEST_DELIVERY_OFFSET active: ${process.env['FAST_TEST_DELIVERY_OFFSET']} minutes - Events will trigger soon (TESTING ONLY)`
-  );
+  if (process.env['EVENT_DELIVERY_TIMES_OVERRIDE']) {
+    server.log.warn(
+      `⚠️  EVENT_DELIVERY_TIMES_OVERRIDE active: ${process.env['EVENT_DELIVERY_TIMES_OVERRIDE']} - Events will trigger at this time (TESTING ONLY)`
+    );
+  } else if (process.env['FAST_TEST_DELIVERY_OFFSET']) {
+    server.log.warn(
+      `⚠️  FAST_TEST_DELIVERY_OFFSET active: ${process.env['FAST_TEST_DELIVERY_OFFSET']} - Events will trigger soon (TESTING ONLY)`
+    );
+  }
 } else {
   server.log.info('✓ Using default delivery times (9:00 AM for birthdays)');
 }
