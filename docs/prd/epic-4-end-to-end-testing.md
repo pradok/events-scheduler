@@ -128,7 +128,39 @@
 
 ---
 
-## Story 4.5: Manual E2E Testing Workflow Documentation
+## Story 4.5: Configurable Delivery Time Override for Manual Testing
+
+**As a** developer/QA tester,
+**I want** a domain-pure configuration system with environment variable override support,
+**so that** I can manually test the E2E event flow with fast triggers (e.g., 5 minutes) instead of waiting until the default delivery time (9am).
+
+**Acceptance Criteria:**
+
+1. Port/Adapter pattern for delivery time configuration:
+   - `IDeliveryTimeConfigProvider` interface (port)
+   - `StaticDeliveryTimeConfigProvider` (default 9am)
+   - `EnvironmentDeliveryTimeConfigProvider` (env var override)
+2. Environment variable: `EVENT_DELIVERY_OVERRIDE=+5` (5-minute offset)
+3. Domain layer remains pure (no env var dependencies)
+4. EventBusFactory receives config provider via dependency injection
+5. Lambda handlers instantiate config providers at startup
+6. Startup logging shows override status
+7. Manual test script: `npm run test:manual`
+8. Unit tests for all config providers
+9. Integration test verifies override works end-to-end
+10. Documentation: Future extensibility for per-user preferences
+
+**Design Highlights:**
+- Hexagonal architecture (ports & adapters)
+- Decorator pattern (env provider wraps static provider)
+- Future-proof for database-driven config
+- Enables multi-event-type scenarios
+
+**Full Story:** [docs/stories/4.5.configurable-delivery-time-override.story.md](../stories/4.5.configurable-delivery-time-override.story.md)
+
+---
+
+## Story 4.6: Manual E2E Testing Workflow Documentation
 
 **As a** developer,
 **I want** clear documentation for manual E2E testing,
@@ -140,23 +172,23 @@
 2. Guide includes step-by-step workflow:
    - Start LocalStack: `npm run docker:start`
    - Deploy Lambdas: `npm run lambda:all`
-   - Create user via Prisma Studio or API
-   - Create event via Prisma Studio or API
-   - View CloudWatch logs in VSCode
+   - Create user via Prisma Studio or API (with override: `EVENT_DELIVERY_OVERRIDE=+5 npm run dev`)
+   - Monitor event triggers in real-time
+   - View CloudWatch logs in LocalStack Desktop
    - Monitor SQS queue messages
    - Verify event execution in database
 3. Common troubleshooting scenarios documented
 4. Screenshots showing each step
 5. CLI commands for inspecting resources (`awslocal` examples)
 6. Guide includes how to view:
-   - CloudWatch Logs (VSCode or CLI)
-   - SQS messages (VSCode or CLI)
+   - CloudWatch Logs (LocalStack Desktop or CLI)
+   - SQS messages (LocalStack Desktop or CLI)
    - Lambda invocations
    - Database state (Prisma Studio)
 
 ---
 
-## Story 4.6: Comprehensive End-to-End Smoke Test
+## Story 4.7: Comprehensive End-to-End Smoke Test
 
 **As a** developer,
 **I want** one end-to-end test proving the complete system works,
