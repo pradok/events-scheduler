@@ -9,11 +9,114 @@ For a quick 5-minute setup, see [Getting Started](./getting-started.md).
 ## Overview
 
 This guide covers:
+- Complete local setup workflow (Docker + API + Lambdas)
 - Docker environment (PostgreSQL + LocalStack)
+- User API server (Fastify)
 - Database management (Prisma migrations, seeding)
 - Lambda functions (build, deploy, test)
 - NPM scripts reference
 - Development workflows
+
+---
+
+## Complete Local Setup Workflow
+
+This section shows how to run the **complete system** locally including Docker, database, API server, and Lambda functions.
+
+### 1. Start Docker Services
+
+```bash
+npm run docker:start
+```
+
+**Starts:**
+- PostgreSQL (port 5432) - Database
+- LocalStack (port 4566) - AWS service emulation
+
+**Wait:** ~15 seconds for health checks to pass.
+
+### 2. Run Database Migrations
+
+```bash
+npm run prisma:migrate
+```
+
+**Creates:** Database tables (users, events) and applies schema.
+
+### 3. Verify LocalStack Resources
+
+```bash
+npm run docker:verify
+```
+
+**Checks:** SQS queues, IAM roles, EventBridge rules all created.
+
+### 4. Start User API Server (Optional)
+
+```bash
+npm run dev
+```
+
+**Starts:** Fastify API server on http://localhost:3000 with hot-reload.
+
+**Endpoints:**
+- `GET  http://localhost:3000/health` - Health check
+- `GET  http://localhost:3000/user/:id` - Get user
+- `PUT  http://localhost:3000/user/:id` - Update user
+- `DELETE http://localhost:3000/user/:id` - Delete user
+
+**Note:** Press `Ctrl+C` to stop the server.
+
+### 5. Deploy Lambda Functions (Optional)
+
+```bash
+npm run lambda:all
+```
+
+**Deploys:**
+- `event-scheduler` - Triggered by EventBridge every 1 minute
+- `event-worker` - Triggered by SQS messages
+
+**Note:** This is optional for local development but required for E2E testing.
+
+### 6. Open Database UI (Optional)
+
+```bash
+npm run prisma:studio
+```
+
+**Opens:** Prisma Studio at http://localhost:5555 for visual database inspection.
+
+### Complete Setup Summary
+
+After running steps 1-6, you'll have:
+
+| Component | Status | Endpoint/Port |
+|-----------|--------|---------------|
+| PostgreSQL | ✅ Running | localhost:5432 |
+| LocalStack | ✅ Running | http://localhost:4566 |
+| User API | ✅ Running (if started) | http://localhost:3000 |
+| Lambdas | ✅ Deployed (if deployed) | Inside LocalStack |
+| Prisma Studio | ✅ Running (if opened) | http://localhost:5555 |
+
+### Quick Start for Daily Development
+
+**Most common workflow:**
+
+```bash
+# Morning - start everything
+npm run docker:start       # Start infrastructure
+npm run dev                # Start API server (in new terminal)
+
+# Development work...
+# - Edit code (tsx watches and hot-reloads)
+# - Test via Postman/curl at http://localhost:3000
+# - View database via npm run prisma:studio
+
+# Evening - stop everything
+Ctrl+C                     # Stop API server
+npm run docker:stop        # Stop Docker services
+```
 
 ---
 
@@ -222,6 +325,155 @@ npm run db:reset
 
 ---
 
+## User API Server
+
+### Overview
+
+The User API provides HTTP REST endpoints for managing users. It runs as a **Fastify server** (not Lambda) for fast local development with hot-reload.
+
+**Architecture:**
+- **Local Development:** Fastify server (this section)
+- **Production:** Can be deployed as Lambda, ECS, or PaaS (decision TBD)
+
+### Start API Server
+
+```bash
+npm run dev
+```
+
+**What it does:**
+- Starts Fastify server on http://localhost:3000
+- Watches for code changes and auto-reloads (hot-reload)
+- Logs all requests with Pino logger
+
+**Requires:** PostgreSQL running (`npm run docker:start`)
+
+### API Endpoints
+
+#### Health Check
+
+```bash
+curl http://localhost:3000/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-10-27T00:00:00.000Z"
+}
+```
+
+#### Get User
+
+```bash
+curl http://localhost:3000/user/{userId}
+```
+
+**Response (200):**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "firstName": "John",
+  "lastName": "Doe",
+  "dateOfBirth": "1990-05-15",
+  "timezone": "America/New_York",
+  "createdAt": "2025-01-01T10:00:00.000Z",
+  "updatedAt": "2025-01-01T10:00:00.000Z"
+}
+```
+
+**Error (404):**
+```json
+{
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "User not found: {userId}"
+  }
+}
+```
+
+#### Update User
+
+```bash
+curl -X PUT http://localhost:3000/user/{userId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Jane",
+    "dateOfBirth": "1992-06-20",
+    "timezone": "Europe/London"
+  }'
+```
+
+**Request Body (all fields optional):**
+```json
+{
+  "firstName": "string",
+  "lastName": "string",
+  "dateOfBirth": "YYYY-MM-DD",
+  "timezone": "IANA timezone"
+}
+```
+
+**Business Logic:**
+- If `dateOfBirth` changed: Reschedules PENDING birthday events
+- If `timezone` changed: Recalculates PENDING event times
+
+**Response (200):** Updated user object
+
+#### Delete User
+
+```bash
+curl -X DELETE http://localhost:3000/user/{userId}
+```
+
+**What it does:**
+- Deletes user
+- Cascade deletes all associated events (transaction)
+
+**Response (204):** No content (success)
+
+### Testing with Postman/Insomnia
+
+1. Import endpoints:
+   - Base URL: `http://localhost:3000`
+   - Health: `GET /health`
+   - Get User: `GET /user/:id`
+   - Update User: `PUT /user/:id`
+   - Delete User: `DELETE /user/:id`
+
+2. Create test user via Prisma Studio
+3. Test endpoints with user ID
+
+### Hot-Reload Development
+
+The server uses `tsx watch` for automatic code reloading:
+
+1. Start server: `npm run dev`
+2. Edit code in `src/`
+3. Save file → Server auto-restarts
+4. Test changes immediately
+
+**Files watched:**
+- `src/adapters/primary/http/` (routes, server)
+- `src/modules/user/` (use cases, domain)
+- `src/shared/` (validation, events)
+
+### Stop API Server
+
+Press `Ctrl+C` in the terminal running `npm run dev`
+
+### Production Build
+
+```bash
+npm run build:server   # Build to dist/server.js
+npm start              # Run production server
+```
+
+**Note:** Production deployment strategy TBD (Lambda vs ECS vs PaaS)
+
+---
+
 ## Lambda Functions
 
 ### Overview
@@ -424,6 +676,14 @@ You should see logs every minute:
 
 ## NPM Scripts Reference
 
+### API Server Commands
+
+```bash
+npm run dev                 # Start User API with hot-reload (port 3000)
+npm start                   # Start User API in production mode
+npm run build:server        # Build User API for production
+```
+
 ### Docker Commands
 
 ```bash
@@ -440,7 +700,7 @@ npm run docker:teardown     # Stop and remove containers + volumes
 ```bash
 npm run prisma:generate     # Generate Prisma Client
 npm run prisma:migrate      # Run migrations
-npm run prisma:studio       # Open database GUI
+npm run prisma:studio       # Open database GUI (port 5555)
 npm run db:seed             # Seed test data
 npm run db:reset            # Drop all tables and re-migrate
 ```
@@ -469,6 +729,12 @@ npm run test:coverage       # Generate coverage report
 npm run lint                # Check code style
 npm run typecheck           # TypeScript type checking
 npm run format              # Auto-format code
+```
+
+### Utility Commands
+
+```bash
+npm run webhook:mock        # Start mock webhook server for testing
 ```
 
 ---
