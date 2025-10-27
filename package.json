@@ -43,6 +43,8 @@
     "lambda:deploy:localstack": "node ./scripts/deploy-lambda.js",
     "lambda:verify": "./scripts/verify-lambda-deployment.sh",
     "lambda:all": "npm run lambda:build && npm run lambda:deploy:localstack",
+    "e2e:setup": "./scripts/e2e-setup-full.sh",
+    "e2e:verify": "./scripts/e2e-verify-full.sh",
     "webhook:mock": "node ./scripts/mock-webhook-server.js",
     "prepare": "husky install"
   },

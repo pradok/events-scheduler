@@ -60,6 +60,7 @@ npm run docker:start        # Start PostgreSQL + LocalStack
 npm run docker:stop         # Stop containers (keep data)
 npm run docker:reset        # Nuclear option: delete everything and restart
 npm run docker:verify       # Verify LocalStack resources created
+npm run lambda:all          # Build and deploy Lambdas to LocalStack
 npm run prisma:studio       # Open database GUI (port 5555)
 npm test                    # Run all tests
 npm run test:unit           # Unit tests only
@@ -67,7 +68,14 @@ npm run test:integration    # Integration tests
 npm run test:e2e            # End-to-end tests
 ```
 
-See [Local Development Guide](docs/local-development.md) for complete workflow.
+### Complete E2E Environment Setup
+
+```bash
+npm run e2e:setup           # One-command: Start everything + deploy Lambdas
+npm run e2e:verify          # Verify all services running (26 checks)
+```
+
+See [E2E Testing Guide](docs/e2e-testing-guide.md) for production-like local testing.
 
 ---
 
@@ -115,6 +123,7 @@ See [Tech Stack Documentation](docs/architecture/tech-stack.md) for rationale.
 
 ### Getting Started
 - **[Getting Started (5 min)](docs/getting-started.md)** - Quick setup guide
+- **[E2E Testing Guide](docs/e2e-testing-guide.md)** - Production-like local testing (one command!)
 - **[Local Development](docs/local-development.md)** - Complete workflow: Docker, API, Lambdas
 - **[Testing Guide](docs/testing-guide.md)** - Running and writing tests
 - **[Debugging Guide](docs/debugging.md)** - Troubleshooting and logs

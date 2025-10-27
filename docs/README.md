@@ -19,6 +19,7 @@ Practical how-to guides for developers:
 | Guide | Description | Read Time |
 |-------|-------------|-----------|
 | **[Local Development](./local-development.md)** | Docker, npm scripts, database management | 5 min |
+| **[E2E Testing Guide](./e2e-testing-guide.md)** | Production-like local testing with all services | 10 min |
 | **[LocalStack Setup](./localstack-setup-community.md)** | AWS service emulation (Community Edition) | 7 min |
 | **[LocalStack Desktop](./localstack-desktop-setup.md)** | GUI tool for managing LocalStack (Recommended) | 8 min |
 | **[Testing Guide](./testing-guide.md)** | Running and writing unit/integration/E2E tests | 6 min |
