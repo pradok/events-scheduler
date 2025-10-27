@@ -422,6 +422,6 @@ ISC
 - [Architecture Overview](docs/architecture.md)
 - [All Documentation](docs/README.md)
 
-**Status**: 🚧 Epic 4 In Progress | Story 4.1 Complete ✅
+**Status**: 🚧 Epic 4 In Progress
 
 **Last Updated**: 2025-10-27
