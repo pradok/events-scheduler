@@ -36,25 +36,26 @@ See [E2E Testing Guide](docs/e2e-testing-guide.md) for details.
 
 ---
 
-### 🚀 Try Fast Test Mode (30 Second Demo)
+### 🚀 Fast E2E Testing (10-70 Second Demo)
 
-**Want to see events fire in seconds instead of waiting until tomorrow?**
+**Want to see events fire in seconds instead of waiting until 9 AM tomorrow?**
 
 ```bash
-# After running e2e:setup above, in a new terminal:
-npm run test:manual:fast    # Creates user, event fires in 5-65 seconds!
+# After running e2e:setup above:
+WEBHOOK_TEST_URL=https://httpbin.org/post npm run e2e:create-user-today-trigger-event
 ```
 
 **What happens:**
-1. Creates test user with birthday TODAY
-2. Event scheduled for 5 seconds from now (using `FAST_TEST_DELIVERY_OFFSET=5s`)
-3. Scheduler Lambda claims event when ready
-4. Worker Lambda executes webhook delivery
-5. Event marked as COMPLETED
+1. Restarts dev server with `EVENT_DELIVERY_TIMES_OVERRIDE` (10 seconds from now)
+2. Creates test user with birthday TODAY
+3. Scheduler Lambda claims event when ready (runs every 60s)
+4. Worker Lambda executes webhook delivery to httpbin.org
+5. Event status: PENDING → PROCESSING → COMPLETED
+6. Automatic next-year event created (recurring birthdays)
 
-**Watch it happen:** Monitor logs in the terminal where you ran `e2e:setup`
+**Total wait time:** ~10-70 seconds (10s offset + up to 60s for scheduler)
 
-See [Timezone Documentation](docs/architecture/timezone-handling.md) to understand how it works.
+See [Fast E2E Testing Guide](docs/fast-e2e-testing.md) for details and troubleshooting.
 
 ---
 
@@ -162,6 +163,7 @@ See [Tech Stack Documentation](docs/architecture/tech-stack.md) for rationale.
 ### Getting Started
 - **[Getting Started (5 min)](docs/getting-started.md)** - Quick setup guide
 - **[E2E Testing Guide](docs/e2e-testing-guide.md)** - Production-like local testing (one command!)
+- **[Fast E2E Testing](docs/fast-e2e-testing.md)** - Rapid manual testing (~10-70 seconds)
 - **[Local Development](docs/local-development.md)** - Complete workflow: Docker, API, Lambdas
 - **[Testing Guide](docs/testing-guide.md)** - Running and writing tests
 - **[Debugging Guide](docs/debugging.md)** - Troubleshooting and logs
@@ -254,9 +256,10 @@ bday/
   - Recovery service reschedules past-due events
   - Idempotency prevents duplicate deliveries
 
-- **🧪 Fast Test Mode**: Rapid E2E testing without waiting days
-  - `FAST_TEST_DELIVERY_OFFSET=5s` → events fire in 5-65 seconds
-  - Second-level precision (supports 5s, 30s, 2m, etc.)
+- **🧪 Fast E2E Testing**: Rapid end-to-end testing without waiting until 9 AM
+  - `EVENT_DELIVERY_TIMES_OVERRIDE` → events fire in ~10-70 seconds
+  - Automated script restarts server and creates test user
+  - Full flow verification: PENDING → PROCESSING → COMPLETED
   - Perfect for manual testing and demos
 
 - **🐳 Production-Like Local Environment**: One command setup
@@ -299,11 +302,13 @@ bday/
 - ✅ Epic 3: Recovery & Reliability (4 stories)
 - ✅ Epic 4: E2E Testing Infrastructure (5 stories)
 
-**Recent Progress (Story 4.5):**
-- ✅ Fast test delivery offset for rapid E2E testing (`FAST_TEST_DELIVERY_OFFSET`)
-- ✅ Second-level precision for event scheduling
+**Recent Progress:**
+- ✅ Automated fast E2E testing script with server restart (`create-test-user-today.js`)
+- ✅ Complete event flow verification in ~10-70 seconds
+- ✅ Webhook delivery to external URLs (httpbin.org) for Docker networking
+- ✅ Comprehensive fast E2E testing documentation
+- ✅ Automatic next-year event generation (recurring birthdays)
 - ✅ Integration tests for EventBusFactory with real database
-- ✅ Comprehensive timezone handling documentation
 - ✅ VSCode Jest plugin compatibility (unit tests only by default)
 
 **System Maturity:**
@@ -317,7 +322,8 @@ bday/
 - User creation → Birthday event scheduling → Event delivery (full flow)
 - Distributed scheduling with concurrent Lambda instances
 - Timezone-aware event delivery (9 AM local time)
-- Fast test mode (5s/30s/2m offsets for rapid testing)
+- Fast E2E testing (~10-70 seconds for complete flow verification)
+- Automatic next-year event generation (recurring birthdays)
 - Failure recovery and missed event detection
 - LocalStack E2E environment (EventBridge + Lambda + SQS)
 
@@ -355,33 +361,29 @@ npm run test:watch          # Unit tests in watch mode (VSCode Jest plugin compa
 
 ### Fast Manual E2E Testing
 
-For rapid manual testing of event scheduling (without waiting for 9:00 AM):
+For rapid manual testing of the complete event flow (without waiting until 9 AM):
 
 ```bash
-# Start server with delivery time override (triggers events in 5 minutes)
-FAST_TEST_DELIVERY_OFFSET=5 npm run dev
-
-# In another terminal, run the manual test script
-npm run test:manual         # Creates user and shows next steps
-npm run test:manual:fast    # Same as above (explicit +5 minutes)
+# Complete automated test (restarts server + creates user)
+WEBHOOK_TEST_URL=https://httpbin.org/post npm run e2e:create-user-today-trigger-event
 ```
 
 **What it does:**
-- Creates a test user via API
-- Schedules birthday event to trigger in 5 minutes (instead of 9:00 AM)
-- Shows expected trigger time and monitoring instructions
 
-**Environment Variable:**
-- `FAST_TEST_DELIVERY_OFFSET={value}` - Events trigger in X time from now
-- Supports minutes and seconds:
-  - `5` or `5m` = 5 minutes
-  - `30s` = 30 seconds (ultra-fast)
-  - `120` or `120m` = 2 hours
-- Invalid format falls back to default (9am) - no error thrown
-- **TESTING ONLY** - DO NOT use in production
-- Future: Production config will use AWS Parameter Store (separate from this testing feature)
+- Kills existing server and restarts with `EVENT_DELIVERY_TIMES_OVERRIDE`
+- Creates test user with birthday TODAY
+- Event triggers in ~10-70 seconds (10s offset + scheduler interval)
+- Full flow: PENDING → PROCESSING → COMPLETED
+- Automatic next-year event created for recurring birthdays
 
-See [Testing Guide](docs/testing-guide.md) for details.
+**Why use external webhook URL?**
+
+- Worker Lambda runs inside Docker (LocalStack)
+- Cannot reach `localhost` on host machine
+- Use `https://httpbin.org/post` to verify webhook delivery
+- See [Fast E2E Testing Guide](docs/fast-e2e-testing.md) for localhost setup
+
+See [Fast E2E Testing Guide](docs/fast-e2e-testing.md) for complete documentation and troubleshooting.
 
 ---
 
