@@ -154,6 +154,8 @@ Every log entry must include:
 #### Circuit Breaker
 Not implemented in Phase 1. Deferred to Phase 2+ when monitoring data indicates need.
 
+**See:** [Phase 2 Enhancement: Circuit Breaker](../phase-2-enhancements/circuit-breaker.md) for detailed implementation guide.
+
 #### Timeout Configuration
 - **Webhook Calls**: 10 seconds
 - **Database Queries**: 5 seconds

@@ -135,12 +135,16 @@ When using `$queryRaw`, you MUST:
 | Repository | Method | Reason |
 |------------|--------|--------|
 | `PrismaUserRepository` | `findUsersWithUpcomingBirthdays()` | PostgreSQL `TO_CHAR()` for date component extraction; handles year wrap-around logic |
-| `PrismaEventRepository` | `claimReadyEvents()` | PostgreSQL `FOR UPDATE SKIP LOCKED` for distributed scheduler concurrency safety |
+| `PrismaEventRepository` | `claimReadyEvents()` | PostgreSQL `FOR UPDATE SKIP LOCKED` for distributed scheduler concurrency safety (pessimistic locking) |
 
 **Code References:**
 
-- [PrismaUserRepository.ts:74-111](../../src/adapters/secondary/persistence/PrismaUserRepository.ts)
-- [PrismaEventRepository.ts:125-166](../../src/adapters/secondary/persistence/PrismaEventRepository.ts)
+- [PrismaUserRepository.ts:74-111](../../src/modules/user/adapters/persistence/PrismaUserRepository.ts)
+- [PrismaEventRepository.ts:128-197](../../src/modules/event-scheduling/adapters/persistence/PrismaEventRepository.ts)
+
+**Related Documentation:**
+
+- [Database Locking Strategies](./database-locking.md) - Comprehensive guide to pessimistic and optimistic locking
 
 **Default Approach:**
 

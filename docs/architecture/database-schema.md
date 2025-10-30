@@ -122,19 +122,42 @@ Supports queries that filter events by status (e.g., finding all PENDING or FAIL
 ### idx_events_target_timestamp_utc
 Supports queries that sort or filter events by their scheduled time.
 
-### idx_events_scheduler_query (Partial Index)
+### idx_events_scheduler_query (Composite Index)
 **Most Critical Index**: Optimized for the scheduler's main query:
 ```sql
 SELECT * FROM events
-WHERE targetTimestampUTC <= NOW()
-AND status = 'PENDING'
+WHERE status = 'PENDING'
+  AND target_timestamp_utc <= NOW()
+ORDER BY target_timestamp_utc ASC
 FOR UPDATE SKIP LOCKED
 LIMIT 100;
 ```
-This partial index only includes PENDING events, significantly reducing index size and improving query performance.
 
-### idx_events_user_pending
-Supports queries that need to find pending events for a specific user (e.g., during timezone updates when rescheduling is needed).
+This is a **composite index on `(target_timestamp_utc, status)`** that indexes both columns together.
+
+**Current Implementation:** Regular composite index (indexes ALL events regardless of status)
+
+**Future Optimization:** Convert to a partial index with `WHERE status = 'PENDING'` to reduce index size and improve performance at scale (see [Database Locking Strategies](./database-locking.md) for details).
+
+### idx_events_user_pending (Composite Index)
+
+This is a **composite index on `(user_id, status)`** that indexes both columns together in that specific order.
+
+**What queries it supports:**
+```sql
+-- ✅ Uses index efficiently (filters by user_id, then status)
+SELECT * FROM events WHERE user_id = 'abc' AND status = 'PENDING';
+
+-- ✅ Uses index efficiently (filters by user_id only - prefix match)
+SELECT * FROM events WHERE user_id = 'abc';
+
+-- ❌ Cannot use this index (status is second column, user_id not specified)
+SELECT * FROM events WHERE status = 'PENDING';
+```
+
+**Use case:** Finding pending events for a specific user (e.g., during timezone updates when rescheduling is needed).
+
+**Index order matters:** PostgreSQL can use a composite index `(userId, status)` for queries filtering by `userId` alone OR `userId + status`, but NOT for queries filtering by `status` alone.
 
 ---
 
@@ -163,16 +186,24 @@ Automatically updates the `updated_at` timestamp whenever a record is modified. 
 
 ---
 
-## Optimistic Locking Strategy
+## Locking Strategies
 
-The `version` column in the `events` table implements optimistic locking:
+The database schema supports both pessimistic and optimistic locking:
+
+### Pessimistic Locking (FOR UPDATE SKIP LOCKED)
+The `idx_events_scheduler_query` partial index is optimized for the scheduler's atomic claiming query that uses PostgreSQL row-level locking to prevent duplicate event processing in distributed systems.
+
+### Optimistic Locking (Version-Based)
+The `version` column in the `events` table implements optimistic locking for general event updates:
 
 ```sql
 UPDATE events
-SET status = 'PROCESSING', version = version + 1
+SET status = 'COMPLETED', version = version + 1
 WHERE id = ? AND version = ?;
 ```
 
-If the update affects 0 rows, it means another process has already claimed the event (version mismatch). This provides a secondary safeguard alongside `FOR UPDATE SKIP LOCKED`.
+If the update affects 0 rows, it means another process has already modified the event (version mismatch), and an `OptimisticLockError` is thrown.
+
+**For comprehensive documentation on both locking strategies, see:** [Database Locking Strategies](./database-locking.md)
 
 ---
