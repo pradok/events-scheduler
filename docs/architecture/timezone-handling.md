@@ -725,6 +725,123 @@ const afterPublish = DateTime.utc();   // Always UTC
 
 ---
 
+## The targetTimestampLocal Redundancy Question
+
+### Key Discovery: Is targetTimestampLocal Actually Needed?
+
+You might notice that the Event schema stores **both** `targetTimestampUTC` and `targetTimestampLocal`, and wonder: "Isn't this redundant?"
+
+**Short answer: Yes, it's largely redundant given how PostgreSQL works.**
+
+### Why It Appears Redundant
+
+Both fields use PostgreSQL's `TIMESTAMPTZ` type:
+
+```typescript
+// From schema.prisma
+targetTimestampUTC   DateTime @db.Timestamptz(6)  // Stores UTC timestamp
+targetTimestampLocal DateTime @db.Timestamptz(6)  // Stores local timestamp
+```
+
+**Here's the key insight:** PostgreSQL's `TIMESTAMPTZ` type:
+
+1. Accepts timestamps in any timezone
+2. **Immediately converts and stores them as UTC internally**
+3. Both fields end up storing the **exact same UTC value** in the database
+
+**Example:**
+```typescript
+// Creating an event for user in New York (EST = UTC-5)
+targetTimestampUTC:   2026-01-15T14:00:00Z         // 2 PM UTC
+targetTimestampLocal: 2026-01-15T09:00:00-05:00   // 9 AM EST
+
+// PostgreSQL stores BOTH as:
+target_timestamp_utc:    2026-01-15 14:00:00+00
+target_timestamp_local:  2026-01-15 14:00:00+00   // Same value!
+```
+
+### Actual Usage in Codebase
+
+Analysis of the codebase reveals:
+
+- **`targetTimestampUTC`**: Used for scheduling queries, business logic, and all time comparisons
+- **`targetTimestampLocal`**: Only used in **test assertions** to verify correct local time calculation
+- **`targetTimezone`**: Used for timezone conversions and rescheduling logic
+
+**Search results show:**
+
+```bash
+# All uses of targetTimestampLocal in non-test code:
+1. Event entity property declaration (domain model)
+2. Event mapper (domain → database conversion)
+3. Repository create/update operations (persistence)
+
+# All reads of targetTimestampLocal properties:
+100% are in test files checking assertions like:
+  expect(event.targetTimestampLocal.hour).toBe(9);
+  expect(event.targetTimestampLocal.month).toBe(1);
+```
+
+### So What's the Only Point of Having targetTimestampLocal?
+
+**Test Verification and Development Debugging:**
+
+The field serves as a convenience for:
+
+1. **Test Assertions** - Verifying that local time calculations are correct without doing timezone math in tests
+2. **Development Debugging** - Quickly seeing "what local time was this event scheduled for?" during development
+3. **Audit Trail** - Preserving a record of the calculated local time at event creation time
+
+### Could We Remove It?
+
+**Yes, absolutely.** A simpler schema would be:
+
+```typescript
+// Minimal schema (functionally equivalent)
+targetTimestampUTC: DateTime    // The absolute UTC time
+targetTimezone:     String      // IANA timezone name
+
+// You can always derive the local representation:
+const localTime = targetTimestampUTC.setZone(targetTimezone);
+```
+
+### Why Keep It Then?
+
+The redundancy is a trade-off decision:
+
+**Pros of keeping targetTimestampLocal:**
+
+- Faster test writing (no timezone conversion needed in assertions)
+- Explicit documentation of "what local time was intended"
+- Negligible storage cost (8 bytes per event)
+- Simpler mapper code (don't need to recalculate for domain entity)
+
+**Cons:**
+
+- Redundant data (violates normalization principles)
+- Slightly more complex schema
+- Potential confusion (as you discovered!)
+
+**Current stance:** Keep it for developer convenience and test clarity, but acknowledge it's not functionally necessary.
+
+### The Real Required Fields
+
+For the system to work, you **only** need:
+
+1. **`targetTimestampUTC`** - When to fire the event (absolute time)
+2. **`targetTimezone`** - User's timezone context (for rescheduling and display)
+
+These two fields give you everything:
+
+- Efficient scheduling queries
+- Ability to display in user's local time
+- Handle DST transitions
+- Reschedule when timezone or birthday changes
+
+**Bottom line:** `targetTimestampLocal` is a developer convenience field, not a functional requirement.
+
+---
+
 ## Summary
 
 ### Normal Production (9 AM)
@@ -753,9 +870,15 @@ const afterPublish = DateTime.utc();   // Always UTC
 
 ## Further Reading
 
+### Related Documentation
+
 - [Event Delivery Time Configuration](../src/modules/event-scheduling/config/event-delivery-times.ts)
 - [Delivery Time Config Function](../src/modules/event-scheduling/config/delivery-time-config.ts)
 - [Birthday Event Handler](../src/modules/event-scheduling/domain/services/event-handlers/BirthdayEventHandler.ts)
 - [Create Birthday Event Use Case](../src/modules/event-scheduling/application/use-cases/CreateBirthdayEventUseCase.ts)
 - [Event Entity](../src/modules/event-scheduling/domain/entities/Event.ts)
 - [Story 4.5: Configurable Delivery Time Override](../docs/stories/4.5.configurable-delivery-time-override.md)
+
+### Potential Improvements
+
+- [Timezone and Timestamp Redundancies](../improvements/timezone-timestamp-redundancies.md) - Analysis of redundancies in current implementation (convertToUTC call, targetTimestampLocal field) with recommendations for potential simplification
